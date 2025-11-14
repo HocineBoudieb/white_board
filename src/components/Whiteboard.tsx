@@ -20,6 +20,14 @@ import { MarkdownNode } from './MarkdownNode';
 import { ImageNode } from './ImageNode';
 import { TodoNode } from './TodoNode';
 import { DrawingNode } from './DrawingNode';
+import MermaidNode from './MermaidNode';
+import FlashcardNode from './FlashcardNode';
+import QuizNode from './QuizNode';
+import TimelineNode from './TimelineNode';
+import DefinitionCardNode from './DefinitionCardNode';
+import FormulaNode from './FormulaNode';
+import ComparisonTableNode from './ComparisonTableNode';
+import ProgressTrackerNode from './ProgressTrackerNode';
 
 const proOptions = { hideAttribution: true };
 
@@ -33,6 +41,14 @@ const nodeTypes = {
   image: ImageNode,
   todo: TodoNode,
   drawing: DrawingNode,
+  mermaid: MermaidNode,
+  flashcard: FlashcardNode,
+  quiz: QuizNode,
+  timeline: TimelineNode,
+  definition: DefinitionCardNode,
+  formula: FormulaNode,
+  comparison: ComparisonTableNode,
+  progress: ProgressTrackerNode,
 };
 
 export default function Whiteboard() {
@@ -54,25 +70,25 @@ export default function Whiteboard() {
       const originNode = getNode(originNodeId);
       if (!originNode) return;
 
-      const newId = `node-${nodeId + 1}`;
+      // Créer un node de chargement temporaire
+      const loadingId = `loading-${nodeId + 1}`;
       setNodeId((prev) => prev + 1);
 
-      const newNode: Node<AiNodeData> = {
-        id: newId,
+      const loadingNode: Node = {
+        id: loadingId,
         type: 'markdown',
         position: {
           x: originNode.position.x + (originNode.width || 0) + 20,
           y: originNode.position.y,
         },
         data: {
-          label: 'Markdown',
-          text: 'AI is thinking...',
+          text: '🤔 AI is thinking...',
         },
         parentNode: originNode.parentNode,
         extent: originNode.extent,
       };
 
-      setNodes((nodes) => nodes.concat(newNode));
+      setNodes((nodes) => nodes.concat(loadingNode));
 
       fetch('/api/groq', {
         method: 'POST',
@@ -81,7 +97,53 @@ export default function Whiteboard() {
         },
         body: JSON.stringify({
           messages: [
-            { role: 'user', content: `${text}\n\nRespond in well-formatted markdown.` },
+            { 
+              role: 'user', 
+              content: `${text}
+
+IMPORTANT: Respond ONLY with a valid JSON array of nodes. Do not include any other text, explanation, or markdown formatting.
+
+Each node should have this structure:
+{
+  "type": "markdown" | "todo" | "image" | "drawing" | "mermaid" | "flashcard" | "quiz" | "timeline" | "definition" | "formula" | "comparison" | "progress",
+  "data": { ... }
+}
+
+Available node types:
+- markdown: { "text": "markdown content" }
+- todo: { "items": [{ "text": "item text", "completed": false }] }
+- image: { "url": "image url" }
+- drawing: { "lines": [[{"x": 0, "y": 0}, {"x": 10, "y": 10}]] }
+- mermaid: { "text": "mermaid diagram syntax" }
+- flashcard: { "front": "recto", "back": "verso" }
+- quiz: { "question": "Q?", "choices": [{ "id": "1", "text": "A", "correct": true }, { "id": "2", "text": "B", "correct": false }], "explanation": "optional" }
+- timeline: { "events": [{ "id": "1", "date": "2024-01-01", "title": "Event", "description": "optional" }] }
+- definition: { "term": "Mot", "definition": "Définition", "example": "optional", "tags": ["tag1"] }
+- formula: { "latex": "a + b", "variables": { "a": 1, "b": 2 } }
+- comparison: { "headers": ["A", "B"], "rows": [{ "id": "1", "label": "Critère", "col1": "val A", "col2": "val B" }] }
+- progress: { "current": 75, "milestones": [{ "id": "1", "label": "Done", "completed": true }], "stats": [{ "label": "Heures", "value": "12h" }] }
+
+Example response:
+[
+  {
+    "type": "markdown",
+    "data": {
+      "text": "# Hello\\nThis is markdown"
+    }
+  },
+  {
+    "type": "todo",
+    "data": {
+      "items": [
+        { "text": "Task 1", "completed": false },
+        { "text": "Task 2", "completed": true }
+      ]
+    }
+  }
+]
+
+Respond with ONLY the JSON array, nothing else.` 
+            },
           ],
         }),
       }).then(async (response) => {
@@ -112,21 +174,15 @@ export default function Whiteboard() {
                 const evt = JSON.parse(jsonStr);
                 if (evt.type === 'text-delta' && typeof evt.delta === 'string') {
                   fullText += evt.delta;
-                  setNodes((nodes) =>
-                    nodes.map((node) =>
-                      node.id === newId
-                        ? { ...node, data: { ...node.data, text: fullText } }
-                        : node
-                    )
-                  );
                 } else if (evt.type === 'error' && evt.error) {
                   setNodes((nodes) =>
                     nodes.map((node) =>
-                      node.id === newId
+                      node.id === loadingId
                         ? { ...node, data: { ...node.data, text: `Error: ${evt.error}` } }
                         : node
                     )
                   );
+                  return;
                 }
               } catch (e) {
                 // ignore malformed frames
@@ -135,6 +191,251 @@ export default function Whiteboard() {
 
             sepIndex = buffer.indexOf('\n\n');
           }
+        }
+
+        // Une fois le stream terminé, parser le JSON et créer les nodes
+        try {
+          // Nettoyer le texte (enlever markdown code blocks si présent)
+          let cleanedText = fullText.trim();
+          if (cleanedText.startsWith('```json')) {
+            cleanedText = cleanedText.replace(/^```json\s*/, '').replace(/```\s*$/, '');
+          } else if (cleanedText.startsWith('```')) {
+            cleanedText = cleanedText.replace(/^```\s*/, '').replace(/```\s*$/, '');
+          }
+
+          const nodesData = JSON.parse(cleanedText);
+
+          if (!Array.isArray(nodesData)) {
+            throw new Error('Response is not an array');
+          }
+
+          // Supprimer le node de chargement
+          setNodes((nodes) => nodes.filter((n) => n.id !== loadingId));
+
+          // Créer les nouveaux nodes
+          let currentNodeId = nodeId + 1;
+          const newNodes: Node[] = [];
+          const baseX = originNode.position.x + (originNode.width || 0) + 20;
+          let currentY = originNode.position.y;
+
+          nodesData.forEach((nodeData: any, index: number) => {
+            const newId = `node-${currentNodeId}`;
+            currentNodeId++;
+
+            let newNode: Node | null = null;
+
+            switch (nodeData.type) {
+              case 'markdown':
+                newNode = {
+                  id: newId,
+                  type: 'markdown',
+                  position: { x: baseX, y: currentY },
+                  data: {
+                    text: nodeData.data.text || '',
+                  },
+                  parentNode: originNode.parentNode,
+                  extent: originNode.extent,
+                };
+                currentY += 200; // Espacement vertical
+                break;
+
+              case 'todo':
+                newNode = {
+                  id: newId,
+                  type: 'todo',
+                  position: { x: baseX, y: currentY },
+                  data: {
+                    items: nodeData.data.items || [],
+                  },
+                  parentNode: originNode.parentNode,
+                  extent: originNode.extent,
+                };
+                currentY += 250;
+                break;
+
+              case 'image':
+                newNode = {
+                  id: newId,
+                  type: 'image',
+                  position: { x: baseX, y: currentY },
+                  data: {
+                    url: nodeData.data.url || nodeData.data.src || '',
+                  },
+                  parentNode: originNode.parentNode,
+                  extent: originNode.extent,
+                };
+                currentY += 300;
+                break;
+
+              case 'drawing':
+                newNode = {
+                  id: newId,
+                  type: 'drawing',
+                  position: { x: baseX, y: currentY },
+                  data: {
+                    lines: nodeData.data.lines || [],
+                    setNodes,
+                  },
+                  parentNode: originNode.parentNode,
+                  extent: originNode.extent,
+                };
+                currentY += 200;
+                break;
+              case 'mermaid':
+                newNode = {
+                  id: newId,
+                  type: 'mermaid',
+                  position: { x: baseX, y: currentY },
+                  data: {
+                    text: nodeData.data.text || '',
+                  },
+                  parentNode: originNode.parentNode,
+                  extent: originNode.extent,
+                };
+                currentY += 250;
+                break;
+
+              case 'flashcard':
+                newNode = {
+                  id: newId,
+                  type: 'flashcard',
+                  position: { x: baseX, y: currentY },
+                  data: {
+                    front: nodeData.data.front || '',
+                    back: nodeData.data.back || '',
+                    setNodes,
+                  },
+                  parentNode: originNode.parentNode,
+                  extent: originNode.extent,
+                };
+                currentY += 200;
+                break;
+
+              case 'quiz':
+                newNode = {
+                  id: newId,
+                  type: 'quiz',
+                  position: { x: baseX, y: currentY },
+                  data: {
+                    question: nodeData.data.question || '',
+                    choices: nodeData.data.choices || [],
+                    explanation: nodeData.data.explanation || '',
+                    setNodes,
+                  },
+                  parentNode: originNode.parentNode,
+                  extent: originNode.extent,
+                };
+                currentY += 250;
+                break;
+
+              case 'timeline':
+                newNode = {
+                  id: newId,
+                  type: 'timeline',
+                  position: { x: baseX, y: currentY },
+                  data: {
+                    events: nodeData.data.events || [],
+                    setNodes,
+                  },
+                  parentNode: originNode.parentNode,
+                  extent: originNode.extent,
+                };
+                currentY += 300;
+                break;
+
+              case 'definition':
+                newNode = {
+                  id: newId,
+                  type: 'definition',
+                  position: { x: baseX, y: currentY },
+                  data: {
+                    term: nodeData.data.term || '',
+                    definition: nodeData.data.definition || '',
+                    example: nodeData.data.example || '',
+                    tags: nodeData.data.tags || [],
+                    setNodes,
+                  },
+                  parentNode: originNode.parentNode,
+                  extent: originNode.extent,
+                };
+                currentY += 200;
+                break;
+
+              case 'formula':
+                newNode = {
+                  id: newId,
+                  type: 'formula',
+                  position: { x: baseX, y: currentY },
+                  data: {
+                    latex: nodeData.data.latex || '',
+                    variables: nodeData.data.variables || {},
+                    setNodes,
+                  },
+                  parentNode: originNode.parentNode,
+                  extent: originNode.extent,
+                };
+                currentY += 200;
+                break;
+
+              case 'comparison':
+                newNode = {
+                  id: newId,
+                  type: 'comparison',
+                  position: { x: baseX, y: currentY },
+                  data: {
+                    title: nodeData.data.title || 'Comparaison',
+                    headers: nodeData.data.headers || ['Item A', 'Item B'],
+                    rows: nodeData.data.rows || [],
+                    setNodes,
+                  },
+                  parentNode: originNode.parentNode,
+                  extent: originNode.extent,
+                };
+                currentY += 250;
+                break;
+
+              case 'progress':
+                newNode = {
+                  id: newId,
+                  type: 'progress',
+                  position: { x: baseX, y: currentY },
+                  data: {
+                    current: nodeData.data.current || 0,
+                    milestones: nodeData.data.milestones || [],
+                    stats: nodeData.data.stats || [],
+                    setNodes,
+                  },
+                  parentNode: originNode.parentNode,
+                  extent: originNode.extent,
+                };
+                currentY += 200;
+                break;
+            }
+
+            if (newNode) {
+              newNodes.push(newNode);
+            }
+          });
+
+          setNodeId(currentNodeId);
+          setNodes((nodes) => [...nodes, ...newNodes]);
+
+        } catch (error) {
+          console.error('Error parsing AI response:', error);
+          // En cas d'erreur, afficher le texte brut dans un node markdown
+          setNodes((nodes) =>
+            nodes.map((node) =>
+              node.id === loadingId
+                ? { 
+                    ...node, 
+                    data: { 
+                      ...node.data, 
+                      text: `⚠️ Could not parse response as JSON. Raw response:\n\n${fullText}` 
+                    } 
+                  }
+                : node
+            )
+          );
         }
       });
     },
@@ -335,8 +636,9 @@ export default function Whiteboard() {
         setNodes((nodes) => nodes.concat(newNode));
       }
     },
-    [nodeId, screenToFlowPosition, setNodes],
+    [nodeId, screenToFlowPosition, setNodes, handleAiNodeSubmit],
   );
+  
   return (
     <div style={{ width: '100vw', height: '100vh' }}
       onMouseDown={onMouseDown}
