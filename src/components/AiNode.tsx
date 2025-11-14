@@ -5,17 +5,29 @@ import { Handle, Position } from 'reactflow';
 export type AiNodeData = {
   label: string;
   text: string;
-  onSubmit: (text: string) => void;
+  onSubmit: (text: string, context?: string) => void;
 };
 
 export type AiNode = Node<AiNodeData>;
 
 export default function AiNode({ id, data, selected }: NodeProps<AiNodeData>) {
-  const { setNodes } = useReactFlow();
+  const { setNodes, getNodes } = useReactFlow();
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
+      const node = getNodes().find((n) => n.id === id);
+      if (node && node.parentNode) {
+        const parentNode = getNodes().find((n) => n.id === node.parentNode);
+        if (parentNode) {
+          const context = getNodes()
+            .filter((n) => n.parentNode === parentNode.id && n.id !== id)
+            .map((n) => n.data.text)
+            .join('\n');
+          data.onSubmit(event.currentTarget.value, context);
+          return;
+        }
+      }
       data.onSubmit(event.currentTarget.value);
     }
   };

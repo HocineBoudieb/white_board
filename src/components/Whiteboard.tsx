@@ -66,7 +66,7 @@ export default function Whiteboard() {
   );
 
   const handleAiNodeSubmit = useCallback(
-    (originNodeId: string, text: string) => {
+    (originNodeId: string, text: string, context?: string) => {
       const originNode = getNode(originNodeId);
       if (!originNode) return;
 
@@ -99,7 +99,7 @@ export default function Whiteboard() {
           messages: [
             { 
               role: 'user', 
-              content: `${text}
+              content: `${context ? `${context}\n\n` : ''}${text}
 
 IMPORTANT: Respond ONLY with a valid JSON array of nodes. Do not include any other text, explanation, or markdown formatting.
 
@@ -627,7 +627,7 @@ Respond with ONLY the JSON array, nothing else.`
           data: {
             label: `text node`,
             text: '',
-            onSubmit: (text: string) => handleAiNodeSubmit(`node-${newId}`, text),
+            onSubmit: (text: string, context?: string) => handleAiNodeSubmit(`node-${newId}`, text, context),
           },
           type: 'text',
           parentNode: node.id,
@@ -639,13 +639,131 @@ Respond with ONLY the JSON array, nothing else.`
     [nodeId, screenToFlowPosition, setNodes, handleAiNodeSubmit],
   );
   
-  return (
+ return (
     <div style={{ width: '100vw', height: '100vh' }}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
       onContextMenu={(e) => e.preventDefault()}
     >
+      <style>{`
+        @keyframes nodeAppear {
+          from {
+            opacity: 0;
+            transform: scale(0.8) translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
+
+        @keyframes nodeHover {
+          from {
+            transform: scale(1);
+          }
+          to {
+            transform: scale(1.02);
+          }
+        }
+
+        .react-flow__node {
+          animation: nodeAppear 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+          transition: box-shadow 0.2s ease, opacity 0.2s ease;
+        }
+
+        .react-flow__node:hover {
+          transform: scale(1.02);
+          box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+        }
+
+        .react-flow__node.selected {
+          box-shadow: 0 0 0 2px #3182ce, 0 8px 20px rgba(49, 130, 206, 0.3);
+          transform: scale(1.02);
+        }
+
+        .react-flow__node.dragging {
+          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+        }
+
+        .react-flow__edge {
+          animation: edgeAppear 0.4s ease-out;
+        }
+
+        @keyframes edgeAppear {
+          from {
+            stroke-dashoffset: 1000;
+            opacity: 0;
+          }
+          to {
+            stroke-dashoffset: 0;
+            opacity: 1;
+          }
+        }
+
+        .react-flow__edge-path {
+          stroke-dasharray: 1000;
+          stroke-dashoffset: 0;
+          transition: stroke 0.2s ease, stroke-width 0.2s ease;
+        }
+
+        .react-flow__edge.selected .react-flow__edge-path {
+          stroke-width: 3;
+          stroke: #3182ce;
+        }
+
+        .react-flow__handle {
+          transition: all 0.2s ease;
+        }
+
+        .react-flow__handle:hover {
+          transform: scale(1.3);
+          box-shadow: 0 0 10px rgba(49, 130, 206, 0.5);
+        }
+
+        .react-flow__controls {
+          animation: controlsAppear 0.5s ease-out 0.2s both;
+        }
+
+        @keyframes controlsAppear {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .react-flow__minimap {
+          animation: minimapAppear 0.5s ease-out 0.3s both;
+        }
+
+        @keyframes minimapAppear {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .react-flow__node-group {
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .react-flow__node-group:hover {
+          transform: scale(1.01);
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .react-flow__node-group.selected {
+          box-shadow: 0 0 0 3px rgba(49, 130, 206, 0.3), 0 10px 30px rgba(49, 130, 206, 0.2);
+        }
+      `}</style>
       <ReactFlow
         nodes={nodes}
         edges={edges}
