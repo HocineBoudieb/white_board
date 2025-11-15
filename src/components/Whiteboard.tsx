@@ -16,6 +16,7 @@ import ReactFlow, {
 import '@reactflow/node-resizer/dist/style.css';
 import AiNode, { AiNodeData } from './AiNode';
 import GroupNode from './GroupNode';
+import FileNode, { FileNodeData } from './FileNode';
 import { MarkdownNode } from './MarkdownNode';
 import { ImageNode } from './ImageNode';
 import { TodoNode } from './TodoNode';
@@ -37,6 +38,7 @@ const initialEdges: Edge[] = [];
 const nodeTypes = {
   text: AiNode,
   group: GroupNode,
+  file: FileNode,
   markdown: MarkdownNode,
   image: ImageNode,
   todo: TodoNode,
@@ -59,6 +61,119 @@ export default function Whiteboard() {
   const lastClickTime = React.useRef(0);
   const isDrawing = React.useRef(false);
   const currentDrawing = React.useRef<any>(null);
+  const workerRef = React.useRef<Worker | null>(null);
+
+  React.useEffect(() => {
+    // Initialize the worker
+    workerRef.current = new Worker(new URL('../workers/workers.ts', import.meta.url));
+
+    workerRef.current.onmessage = (event: MessageEvent) => {
+      const { type, ...data } = event.data;
+
+      if (type === 'progress') {
+        setNodes((nds) =>
+          nds.map((node) => {
+            if (node.type === 'file' && node.data.fileName === data.fileName) {
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  status: data.status,
+                  progress: data.progress,
+                },
+              };
+            }
+            return node;
+          })
+        );
+      } else if (type === 'complete') {
+        setNodes((nds) =>
+          nds.map((node) => {
+            if (node.type === 'file' && node.data.fileName === data.fileName) {
+              // Deserialize embeddings
+              const embeddings = data.embeddings.map((emb: number[]) => new Float32Array(emb));
+
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  status: 'completed',
+                  progress: 100,
+                  chunks: data.chunks,
+                  embeddings: embeddings,
+                },
+              };
+            }
+            return node;
+          })
+        );
+      } else if (type === 'error') {
+        setNodes((nds) =>
+          nds.map((node) => {
+            if (node.type === 'file' && node.data.fileName === data.fileName) {
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  status: 'error',
+                  error: data.error,
+                },
+              };
+            }
+            return node;
+          })
+        );
+      }
+    };
+
+    // Cleanup worker on component unmount
+    return () => {
+      workerRef.current?.terminate();
+    };
+  }, [setNodes]);
+
+  const handleFileDrop = useCallback(
+    (file: File, parentNodeId: string) => {
+      const newId = `file-${nodeId + 1}`;
+      setNodeId((prev) => prev + 1);
+
+      const parentNode = getNode(parentNodeId);
+      if (!parentNode) return;
+
+      const position = {
+        x: (parentNode.width || 200) / 2 - 100, // Center it
+        y: (parentNode.height || 150) / 2 - 50,
+      };
+
+      const newNode: Node<FileNodeData> = {
+        id: newId,
+        type: 'file',
+        position,
+        data: {
+          fileName: file.name,
+          fileSize: file.size,
+          status: 'uploading',
+          progress: 0,
+        },
+        parentNode: parentNodeId,
+        extent: 'parent',
+      };
+
+      setNodes((nodes) => nodes.concat(newNode));
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const fileContent = event.target?.result as ArrayBuffer;
+        workerRef.current?.postMessage({
+          type: 'index',
+          fileName: file.name,
+          fileContent,
+        });
+      };
+      reader.readAsArrayBuffer(file);
+    },
+    [nodeId, setNodes, getNode]
+  );
 
   const onConnect = useCallback(
     (params: any) => setEdges((eds) => addEdge(params, eds)),
@@ -542,7 +657,7 @@ Respond with ONLY the JSON array, nothing else.`
         const newNode = {
           id: `node-${newId}`,
           position,
-          data: { label: `group` },
+          data: { label: `group`, onFileDrop: handleFileDrop },
           type: 'group',
           style: { width: 200, height: 150 },
         };
