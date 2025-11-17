@@ -17,6 +17,7 @@ export default function AiNode({ id, data, selected }: NodeProps<AiNodeData>) {
   const onKeyDown = async (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
+      const inputValue = event.currentTarget.value;
       const node = getNodes().find((n) => n.id === id);
       if (node && node.parentNode) {
         const parentNode = getNodes().find((n) => n.id === node.parentNode);
@@ -34,11 +35,16 @@ export default function AiNode({ id, data, selected }: NodeProps<AiNodeData>) {
           let ragContext = '';
 
           if (fileNodes.length > 0) {
-            const query = event.currentTarget.value;
+            const query = inputValue;
             const queryEmbedding = await generateEmbedding(query);
 
             for (const fileNode of fileNodes) {
               const similarChunks = await searchSimilarChunks(queryEmbedding, fileNode.data.chunks, fileNode.data.embeddings, 3);
+              console.log('RAG recherche', {
+                requete: query,
+                fichier: fileNode.data.fileName,
+                resultats: similarChunks,
+              });
               if (similarChunks.length > 0) {
                 ragContext += `\n\n--- Context from ${fileNode.data.fileName} ---\n`;
                 ragContext += similarChunks.map((chunk) => chunk.chunk).join('\n\n');
@@ -48,11 +54,11 @@ export default function AiNode({ id, data, selected }: NodeProps<AiNodeData>) {
           }
 
           const finalContext = `${textContext}${ragContext}`.trim();
-          data.onSubmit(event.currentTarget.value, finalContext);
+          data.onSubmit(inputValue, finalContext);
           return;
         }
       }
-      data.onSubmit(event.currentTarget.value);
+      data.onSubmit(inputValue);
     }
   };
 

@@ -17,3 +17,68 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.react-flow__node:not(.group) {
+  background-color: white;
+  border-radius: 16px;
+  box-shadow: inset 0 0 10px 5px rgba(120, 230, 210, 0.5);
+  padding: 24px;
+}
+
+.sticky-title-container {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 1000;
+}
+
+.sticky-title-toggle {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 999px;
+  padding: 6px 10px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.sticky-title {
+  min-width: 200px;
+  max-width: 50vw;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 12px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+  text-align: center;
+  font-weight: 600;
+  outline: none;
+  user-select: text;
+  transition: all 0.2s ease;
+}
+
+.sticky-title-container.collapsed .sticky-title {
+  padding: 4px 10px;
+  max-width: 240px;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.group-select {
+  min-width: 200px;
+  max-width: 50vw;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 12px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+  text-align: center;
+  text-align-last: center;
+  font-weight: 600;
+  outline: none;
+  user-select: text;
+  transition: all 0.2s ease;
+}

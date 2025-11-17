@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import ReactFlow, {
   MiniMap,
   Controls,
@@ -29,7 +29,7 @@ import DefinitionCardNode from './DefinitionCardNode';
 import FormulaNode from './FormulaNode';
 import ComparisonTableNode from './ComparisonTableNode';
 import ProgressTrackerNode from './ProgressTrackerNode';
-
+import { searchSimilarChunks, batchGenerateEmbeddings } from '../utils/vectorStore';
 const proOptions = { hideAttribution: true };
 
 const initialNodes: Node[] = [];
@@ -53,11 +53,16 @@ const nodeTypes = {
   progress: ProgressTrackerNode,
 };
 
-export default function Whiteboard() {
+export type WhiteboardHandle = {
+  focusGroup: (id: string) => void;
+};
+
+export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: string; name: string }[]) => void }>(function Whiteboard({ onGroupsChange }, ref) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [nodeId, setNodeId] = useState(0);
-  const { screenToFlowPosition, getNodes, getNode } = useReactFlow();
+  const reactFlow = useReactFlow();
+  const { screenToFlowPosition, getNodes, getNode } = reactFlow;
   const lastClickTime = React.useRef(0);
   const isDrawing = React.useRef(false);
   const currentDrawing = React.useRef<any>(null);
@@ -132,6 +137,29 @@ export default function Whiteboard() {
     };
   }, [setNodes]);
 
+  React.useEffect(() => {
+    const groups = nodes
+      .filter((n) => n.type === 'group' && typeof (n as any).data?.name === 'string' && (n as any).data.name.trim().length > 0)
+      .map((n) => ({ id: n.id, name: ((n as any).data.name as string).trim() }));
+    onGroupsChange?.(groups);
+  }, [nodes, onGroupsChange]);
+
+  useImperativeHandle(ref, () => ({
+    focusGroup: (groupId: string) => {
+      const node = getNode(groupId);
+      if (!node) return;
+      if ((reactFlow as any).fitView) {
+        (reactFlow as any).fitView({ nodes: [{ id: groupId }], padding: 0.2, duration: 600 });
+      } else {
+        const w = ((node.style as any)?.width ?? (node as any).width ?? 200) as number;
+        const h = ((node.style as any)?.height ?? (node as any).height ?? 150) as number;
+        const cx = node.position.x + w / 2;
+        const cy = node.position.y + h / 2;
+        (reactFlow as any).setCenter?.(cx, cy, { zoom: 1.2, duration: 600 });
+      }
+    },
+  }));
+
   const handleFileDrop = useCallback(
     (file: File, parentNodeId: string) => {
       const newId = `file-${nodeId + 1}`;
@@ -162,13 +190,43 @@ export default function Whiteboard() {
       setNodes((nodes) => nodes.concat(newNode));
 
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         const fileContent = event.target?.result as ArrayBuffer;
-        workerRef.current?.postMessage({
-          type: 'index',
-          fileName: file.name,
-          fileContent,
-        });
+        setNodes((nds) => nds.map((n) => (n.id === newId ? { ...n, data: { ...n.data, status: 'indexing', progress: 20 } } : n)));
+        try {
+          const pdfjs: any = await import('pdfjs-dist/build/pdf.min.mjs').catch(async () => await import('pdfjs-dist/build/pdf.mjs'));
+          pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+          const loadingTask = pdfjs.getDocument({ data: fileContent });
+          const pdf = await loadingTask.promise;
+          const numPages = pdf.numPages;
+          let fullText = '';
+          for (let i = 1; i <= numPages; i++) {
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+            const pageText = content.items.map((it: any) => ('str' in it ? it.str : '')).join(' ');
+            fullText += pageText + '\n';
+            const progress = Math.min(60, 20 + Math.round((i / numPages) * 40));
+            setNodes((nds) => nds.map((n) => (n.id === newId ? { ...n, data: { ...n.data, progress } } : n)));
+          }
+          const chunkText = (text: string, chunkSize = 1500, overlap = 200): string[] => {
+            const chunks: string[] = [];
+            let start = 0;
+            while (start < text.length) {
+              const end = Math.min(start + chunkSize, text.length);
+              let chunk = text.slice(start, end);
+              const lastBreak = chunk.lastIndexOf('\n');
+              if (lastBreak > 200) chunk = chunk.slice(0, lastBreak);
+              chunks.push(chunk.trim());
+              if (end >= text.length) break;
+              start += chunk.length - overlap;
+            }
+            return chunks.filter((c) => c.length > 0);
+          };
+          const chunks = chunkText(fullText);
+          workerRef.current?.postMessage({ type: 'embed', fileName: file.name, chunks });
+        } catch (err: any) {
+          setNodes((nds) => nds.map((n) => (n.id === newId ? { ...n, data: { ...n.data, status: 'error', error: err?.message || 'PDF parse failed' } } : n)));
+        }
       };
       reader.readAsArrayBuffer(file);
     },
@@ -178,6 +236,41 @@ export default function Whiteboard() {
   const onConnect = useCallback(
     (params: any) => setEdges((eds) => addEdge(params, eds)),
     [setEdges],
+  );
+
+  const handleNodesChange = useCallback(
+    (changes: any) => {
+      onNodesChange(changes);
+      const all = getNodes();
+      const padding = 16;
+      setNodes((nds) =>
+        nds.map((n) => {
+          if (n.type !== 'group') return n;
+          const children = all.filter((c) => c.parentNode === n.id);
+          if (children.length === 0) return n;
+          const currentW = (n.style && (n.style as any).width) || (n as any).width || 100;
+          const currentH = (n.style && (n.style as any).height) || (n as any).height || 50;
+          let needW = currentW;
+          let needH = currentH;
+          for (const c of children) {
+            const cw = (c.style && (c.style as any).width) || (c as any).width || 150;
+            const ch = (c.style && (c.style as any).height) || (c as any).height || 100;
+            const right = c.position.x + cw;
+            const bottom = c.position.y + ch;
+            if (right + padding > needW) needW = right + padding;
+            if (bottom + padding > needH) needH = bottom + padding;
+          }
+          if (needW !== currentW || needH !== currentH) {
+            return {
+              ...n,
+              style: { ...(n.style || {}), width: needW, height: needH },
+            };
+          }
+          return n;
+        })
+      );
+    },
+    [onNodesChange, getNodes, setNodes]
   );
 
   const handleAiNodeSubmit = useCallback(
@@ -327,94 +420,118 @@ Respond with ONLY the JSON array, nothing else.`
           // Supprimer le node de chargement
           setNodes((nodes) => nodes.filter((n) => n.id !== loadingId));
 
-          // Créer les nouveaux nodes
           let currentNodeId = nodeId + 1;
           const newNodes: Node[] = [];
-          const baseX = originNode.position.x + (originNode.width || 0) + 20;
-          let currentY = originNode.position.y;
+          const parent = originNode.parentNode ? getNode(originNode.parentNode) : null;
+          const padding = 16;
+          const sizes: Record<string, { w: number; h: number }> = {
+            markdown: { w: 220, h: 180 },
+            todo: { w: 220, h: 220 },
+            image: { w: 220, h: 260 },
+            drawing: { w: 220, h: 180 },
+            mermaid: { w: 220, h: 220 },
+            flashcard: { w: 220, h: 180 },
+            quiz: { w: 220, h: 250 },
+            timeline: { w: 220, h: 300 },
+            definition: { w: 220, h: 200 },
+            formula: { w: 220, h: 200 },
+            comparison: { w: 220, h: 250 },
+            progress: { w: 220, h: 200 },
+          };
+          const baseXLocal = originNode.position.x + (originNode.width || 0) + 20;
+          const startYLocal = originNode.position.y;
+          let colX = baseXLocal;
+          let colY = startYLocal;
+          const parentHeight = parent ? (((parent.style as any)?.height ?? (parent as any).height) || 150) : Infinity;
 
           nodesData.forEach((nodeData: any, index: number) => {
             const newId = `node-${currentNodeId}`;
             currentNodeId++;
 
             let newNode: Node | null = null;
+            const type = nodeData.type;
+            const sz = sizes[type] || { w: 220, h: 200 };
+            if (parentHeight !== Infinity && colY + sz.h + padding > parentHeight) {
+              colX += sz.w + padding;
+              colY = startYLocal;
+            }
 
             switch (nodeData.type) {
               case 'markdown':
                 newNode = {
                   id: newId,
                   type: 'markdown',
-                  position: { x: baseX, y: currentY },
+                  position: { x: colX, y: colY },
                   data: {
                     text: nodeData.data.text || '',
                   },
                   parentNode: originNode.parentNode,
                   extent: originNode.extent,
+                  style: { width: sz.w, height: sz.h },
                 };
-                currentY += 200; // Espacement vertical
                 break;
 
               case 'todo':
                 newNode = {
                   id: newId,
                   type: 'todo',
-                  position: { x: baseX, y: currentY },
+                  position: { x: colX, y: colY },
                   data: {
                     items: nodeData.data.items || [],
                   },
                   parentNode: originNode.parentNode,
                   extent: originNode.extent,
+                  style: { width: sz.w, height: sz.h },
                 };
-                currentY += 250;
                 break;
 
               case 'image':
                 newNode = {
                   id: newId,
                   type: 'image',
-                  position: { x: baseX, y: currentY },
+                  position: { x: colX, y: colY },
                   data: {
                     url: nodeData.data.url || nodeData.data.src || '',
                   },
                   parentNode: originNode.parentNode,
                   extent: originNode.extent,
+                  style: { width: sz.w, height: sz.h },
                 };
-                currentY += 300;
                 break;
 
               case 'drawing':
                 newNode = {
                   id: newId,
                   type: 'drawing',
-                  position: { x: baseX, y: currentY },
+                  position: { x: colX, y: colY },
                   data: {
                     lines: nodeData.data.lines || [],
                     setNodes,
                   },
                   parentNode: originNode.parentNode,
                   extent: originNode.extent,
+                  style: { width: sz.w, height: sz.h },
                 };
-                currentY += 200;
                 break;
               case 'mermaid':
                 newNode = {
                   id: newId,
                   type: 'mermaid',
-                  position: { x: baseX, y: currentY },
+                  position: { x: colX, y: colY },
                   data: {
                     text: nodeData.data.text || '',
                   },
                   parentNode: originNode.parentNode,
                   extent: originNode.extent,
+                  style: { width: sz.w, height: sz.h },
                 };
-                currentY += 250;
                 break;
 
               case 'flashcard':
                 newNode = {
                   id: newId,
                   type: 'flashcard',
-                  position: { x: baseX, y: currentY },
+                  position: { x: colX, y: colY },
                   data: {
                     front: nodeData.data.front || '',
                     back: nodeData.data.back || '',
@@ -422,15 +539,15 @@ Respond with ONLY the JSON array, nothing else.`
                   },
                   parentNode: originNode.parentNode,
                   extent: originNode.extent,
+                  style: { width: sz.w, height: sz.h },
                 };
-                currentY += 200;
                 break;
 
               case 'quiz':
                 newNode = {
                   id: newId,
                   type: 'quiz',
-                  position: { x: baseX, y: currentY },
+                  position: { x: colX, y: colY },
                   data: {
                     question: nodeData.data.question || '',
                     choices: nodeData.data.choices || [],
@@ -439,30 +556,30 @@ Respond with ONLY the JSON array, nothing else.`
                   },
                   parentNode: originNode.parentNode,
                   extent: originNode.extent,
+                  style: { width: sz.w, height: sz.h },
                 };
-                currentY += 250;
                 break;
 
               case 'timeline':
                 newNode = {
                   id: newId,
                   type: 'timeline',
-                  position: { x: baseX, y: currentY },
+                  position: { x: colX, y: colY },
                   data: {
                     events: nodeData.data.events || [],
                     setNodes,
                   },
                   parentNode: originNode.parentNode,
                   extent: originNode.extent,
+                  style: { width: sz.w, height: sz.h },
                 };
-                currentY += 300;
                 break;
 
               case 'definition':
                 newNode = {
                   id: newId,
                   type: 'definition',
-                  position: { x: baseX, y: currentY },
+                  position: { x: colX, y: colY },
                   data: {
                     term: nodeData.data.term || '',
                     definition: nodeData.data.definition || '',
@@ -472,31 +589,30 @@ Respond with ONLY the JSON array, nothing else.`
                   },
                   parentNode: originNode.parentNode,
                   extent: originNode.extent,
+                  style: { width: sz.w, height: sz.h },
                 };
-                currentY += 200;
                 break;
 
               case 'formula':
                 newNode = {
                   id: newId,
                   type: 'formula',
-                  position: { x: baseX, y: currentY },
+                  position: { x: colX, y: colY },
                   data: {
                     latex: nodeData.data.latex || '',
                     variables: nodeData.data.variables || {},
-                    setNodes,
                   },
                   parentNode: originNode.parentNode,
                   extent: originNode.extent,
+                  style: { width: sz.w, height: sz.h },
                 };
-                currentY += 200;
                 break;
 
               case 'comparison':
                 newNode = {
                   id: newId,
                   type: 'comparison',
-                  position: { x: baseX, y: currentY },
+                  position: { x: colX, y: colY },
                   data: {
                     title: nodeData.data.title || 'Comparaison',
                     headers: nodeData.data.headers || ['Item A', 'Item B'],
@@ -505,15 +621,15 @@ Respond with ONLY the JSON array, nothing else.`
                   },
                   parentNode: originNode.parentNode,
                   extent: originNode.extent,
+                  style: { width: sz.w, height: sz.h },
                 };
-                currentY += 250;
                 break;
 
               case 'progress':
                 newNode = {
                   id: newId,
                   type: 'progress',
-                  position: { x: baseX, y: currentY },
+                  position: { x: colX, y: colY },
                   data: {
                     current: nodeData.data.current || 0,
                     milestones: nodeData.data.milestones || [],
@@ -522,125 +638,28 @@ Respond with ONLY the JSON array, nothing else.`
                   },
                   parentNode: originNode.parentNode,
                   extent: originNode.extent,
+                  style: { width: sz.w, height: sz.h },
                 };
-                currentY += 200;
                 break;
             }
 
-            if (newNode) {
-              newNodes.push(newNode);
-            }
-          });
-
-          setNodeId(currentNodeId);
-          setNodes((nodes) => [...nodes, ...newNodes]);
-
-        } catch (error) {
-          console.error('Error parsing AI response:', error);
-          // En cas d'erreur, afficher le texte brut dans un node markdown
+          if (newNode) {
+            newNodes.push(newNode);
+            colY += sz.h + padding;
+          }
+        });
+          setNodes((nodes) => nodes.concat(newNodes));
+        } catch (e: any) {
           setNodes((nodes) =>
-            nodes.map((node) =>
-              node.id === loadingId
-                ? { 
-                    ...node, 
-                    data: { 
-                      ...node.data, 
-                      text: `⚠️ Could not parse response as JSON. Raw response:\n\n${fullText}` 
-                    } 
-                  }
-                : node
+            nodes.map((n) =>
+              n.id === loadingId
+                ? { ...n, data: { ...n.data, text: `Error: ${e?.message || 'Invalid response'}` } }
+                : n
             )
           );
         }
       });
-    },
-    [getNode, nodeId, setNodes]
-  );
-
-  const onNodesChangeWithResize = (changes: any) => {
-    onNodesChange(changes);
-
-    const parentIdsToResize = new Set<string>();
-
-    changes.forEach((change: any) => {
-      let node;
-      switch (change.type) {
-        case 'position':
-          if (!change.position) break;
-          node = getNodes().find((n) => n.id === change.id);
-          if (node && node.parentNode) {
-            parentIdsToResize.add(node.parentNode);
-          }
-          break;
-        case 'dimensions':
-          node = getNodes().find((n) => n.id === change.id);
-          if (node && node.parentNode) {
-            parentIdsToResize.add(node.parentNode);
-          }
-          break;
-        case 'add':
-          const addedNode = getNodes().find(n => n.id === change.item.id);
-          if (addedNode && addedNode.parentNode) {
-            parentIdsToResize.add(addedNode.parentNode);
-          }
-          break;
-      }
-    });
-
-    if (parentIdsToResize.size > 0) {
-      setNodes((currentNodes) => {
-        let nodesToUpdate = [...currentNodes];
-        parentIdsToResize.forEach(parentId => {
-          const parent = nodesToUpdate.find(n => n.id === parentId);
-          if (!parent) return;
-
-          const children = nodesToUpdate.filter((n) => n.parentNode === parentId);
-          if (children.length > 0) {
-            let minX = Infinity;
-            let minY = Infinity;
-            let maxX = -Infinity;
-            let maxY = -Infinity;
-
-            children.forEach((child) => {
-              const childX = child.position.x;
-              const childY = child.position.y;
-              const childWidth = child.width || 0;
-              const childHeight = child.height || 0;
-
-              minX = Math.min(minX, childX);
-              minY = Math.min(minY, childY);
-              maxX = Math.max(maxX, childX + childWidth);
-              maxY = Math.max(maxY, childY + childHeight);
-            });
-
-            const padding = 20;
-            const newWidth = maxX - minX + 2 * padding;
-            const newHeight = maxY - minY + 2 * padding;
-            const newRelativeX = minX - padding;
-            const newRelativeY = minY - padding;
-
-            nodesToUpdate = nodesToUpdate.map(n => {
-              if (n.id === parentId) {
-                return {
-                  ...n,
-                  style: { ...n.style, width: newWidth, height: newHeight },
-                  position: { x: n.position.x + newRelativeX, y: n.position.y + newRelativeY }
-                };
-              }
-              if (n.parentNode === parentId) {
-                return {
-                  ...n,
-                  position: { x: n.position.x - newRelativeX, y: n.position.y - newRelativeY }
-                }
-              }
-              return n;
-            });
-          }
-        });
-        return nodesToUpdate;
-      });
-    }
-  };
+    }, [getNode, nodeId, setNodes]);
 
   const onPaneClick = useCallback(
     (event: any) => {
@@ -657,8 +676,9 @@ Respond with ONLY the JSON array, nothing else.`
         const newNode = {
           id: `node-${newId}`,
           position,
-          data: { label: `group`, onFileDrop: handleFileDrop },
+          data: { label: `group`, onFileDrop: handleFileDrop, setNodes, name: '' },
           type: 'group',
+        className: 'group',
           style: { width: 200, height: 150 },
         };
         setNodes((nodes) => nodes.concat(newNode));
@@ -685,10 +705,14 @@ Respond with ONLY the JSON array, nothing else.`
         point.y <= node.position.y + (node.height || 0)
     );
 
+    const localPosition = targetGroup
+      ? { x: point.x - targetGroup.position.x, y: point.y - targetGroup.position.y }
+      : point;
+
     const newDrawingNode = {
       id: newId,
       type: 'drawing',
-      position: point,
+      position: localPosition,
       data: { lines: [[point]], setNodes },
       parentNode: targetGroup ? targetGroup.id : undefined,
       extent: targetGroup ? 'parent' : undefined,
@@ -754,7 +778,7 @@ Respond with ONLY the JSON array, nothing else.`
     [nodeId, screenToFlowPosition, setNodes, handleAiNodeSubmit],
   );
   
- return (
+  return (
     <div style={{ width: '100vw', height: '100vh' }}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
@@ -882,7 +906,7 @@ Respond with ONLY the JSON array, nothing else.`
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodesChange={onNodesChangeWithResize}
+        onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onPaneClick={onPaneClick}
@@ -896,4 +920,4 @@ Respond with ONLY the JSON array, nothing else.`
       </ReactFlow>
     </div>
   );
-}
+});

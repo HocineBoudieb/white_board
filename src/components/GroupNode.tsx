@@ -4,12 +4,15 @@ import { Handle, Position, NodeResizer } from 'reactflow';
 export type GroupNodeProps = {
   data: {
     onFileDrop: (file: File, parentNodeId: string) => void;
+    setNodes?: any;
+    name?: string;
   };
   id: string;
 };
 
 const GroupNode = ({ id, data }: GroupNodeProps) => {
   const [isDragOver, setIsDragOver] = useState(false);
+  const [name, setName] = useState<string>(data?.name || '');
 
   const handleDragOver = (event: React.DragEvent) => {
     event.preventDefault();
@@ -41,6 +44,7 @@ const GroupNode = ({ id, data }: GroupNodeProps) => {
     <>
       <NodeResizer minWidth={100} minHeight={50} />
       <div
+        className="group"
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -53,8 +57,38 @@ const GroupNode = ({ id, data }: GroupNodeProps) => {
             ? 'rgba(49, 130, 206, 0.1)'
             : 'rgba(0,0,0,0.05)',
           transition: 'border-color 0.2s, background-color 0.2s',
+          position: 'relative',
+          overflow: 'visible',
         }}
       >
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => {
+            if (data.setNodes) {
+              const trimmed = (name || '').trim();
+              data.setNodes((nds: any[]) =>
+                nds.map((n: any) =>
+                  n.id === id ? { ...n, data: { ...n.data, name: trimmed } } : n
+                )
+              );
+            }
+          }}
+          placeholder="Nom du groupe"
+          style={{
+            position: 'absolute',
+            top: -56,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '4px 10px',
+            borderRadius: 999,
+            background: 'transparent',
+            fontSize: 12,
+            maxWidth: '70%',
+            textAlign: 'center',
+            outline: 'none',
+          }}
+        />
         {isDragOver && (
           <div
             style={{

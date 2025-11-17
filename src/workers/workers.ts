@@ -1,132 +1,56 @@
-importScripts('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js');
+/* eslint-disable */
 
-declare const pdfjsLib: any;
+declare const self: DedicatedWorkerGlobalScope;
 
-import { env, pipeline, Pipeline } from '@xenova/transformers';
-
-import { batchGenerateEmbeddings, initEmbeddings } from '../utils/vector_store';
-
-// Specify a custom location for the wasm files
-env.backends.onnx.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/';
-
-// Configure the environment
-env.allowLocalModels = false;
-env.allowQuantizedModels = false;
-
-// Set the worker source for pdf.js
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js`;
-
-interface IndexMessage {
-  type: 'index';
-  fileContent: ArrayBuffer;
-  fileName: string;
+function normalize(vec: Float32Array): Float32Array {
+  let norm = 0;
+  for (let i = 0; i < vec.length; i++) norm += vec[i] * vec[i];
+  norm = Math.sqrt(norm) || 1;
+  const out = new Float32Array(vec.length);
+  for (let i = 0; i < vec.length; i++) out[i] = vec[i] / norm;
+  return out;
 }
 
-interface ProgressMessage {
-  type: 'progress';
-  fileName: string;
-  progress: number;
-  status: string;
-}
-
-interface CompleteMessage {
-  type: 'complete';
-  fileName: string;
-  chunks: string[];
-  embeddings: number[][];
-}
-
-interface ErrorMessage {
-  type: 'error';
-  error: string;
-}
-
-type WorkerMessage = ProgressMessage | CompleteMessage | ErrorMessage;
-
-// Chunk text into smaller pieces
-function chunkText(text: string, chunkSize: number = 500, overlap: number = 50): string[] {
-  const chunks: string[] = [];
-  const words = text.split(/\s+/);
-  
-  for (let i = 0; i < words.length; i += chunkSize - overlap) {
-    const chunk = words.slice(i, i + chunkSize).join(' ');
-    if (chunk.trim().length > 0) {
-      chunks.push(chunk.trim());
-    }
+function hash(s: string) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
   }
-  
-  return chunks;
+  return h >>> 0;
 }
 
-// Clean extracted text
-function cleanText(text: string): string {
-  return text
-    .replace(/\s+/g, ' ')
-    .replace(/\n+/g, '\n')
-    .trim();
+function tokenize(t: string) {
+  const a = t.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const b: string[] = [];
+  for (let i = 0; i < t.length - 1; i++) b.push(t.slice(i, i + 2));
+  return a.concat(b);
 }
 
-self.onmessage = async (event: MessageEvent<IndexMessage>) => {
-  const data = event.data;
-  console.log('Worker received message:', data);
+// This worker focuses on generating embeddings from provided text chunks.
 
-  if (data.type === 'index') {
-    try {
-      const pdf = await pdfjsLib.getDocument(data.fileContent).promise;
-      let allText = '';
-
-      console.log(`Starting PDF text extraction for ${pdf.numPages} pages.`);
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        const text = textContent.items.map((item: any) => item.str).join(' ');
-        allText += text + '\n';
-
-        const progress = (i / pdf.numPages) * 50;
-        console.log(`PDF extraction progress: ${progress.toFixed(2)}%`);
-        self.postMessage({
-          type: 'progress',
-          fileName: data.fileName,
-          status: `Extracting text... (${i}/${pdf.numPages})`,
-          progress: progress,
-        });
+self.onmessage = async (event: MessageEvent) => {
+  const { type, fileName, chunks } = event.data as { type: string; fileName: string; chunks: string[] };
+  if (type !== 'embed') return;
+  try {
+    const dim = 1024;
+    const embeddings: number[][] = [];
+    let done = 0;
+    for (const chunk of chunks) {
+      const v = new Float32Array(dim);
+      const toks = tokenize(chunk);
+      for (const tok of toks) {
+        const idx = hash(tok) % dim;
+        v[idx] += 1;
       }
-      console.log('PDF text extraction complete.');
-
-      const cleanedText = cleanText(allText);
-      const chunks = chunkText(cleanedText, 1000, 200);
-
-      console.log('Initializing embedding model...');
-      await initEmbeddings();
-      console.log('Embedding model initialized.');
-
-      console.log(`Generating embeddings for ${chunks.length} chunks.`);
-      const embeddings = await batchGenerateEmbeddings(chunks, 10, (progress) => {
-        const totalProgress = 50 + progress / 2;
-        console.log(`Embedding generation progress: ${progress.toFixed(2)}% (Total: ${totalProgress.toFixed(2)}%)`);
-        self.postMessage({
-          type: 'progress',
-          fileName: data.fileName,
-          status: 'Generating embeddings...',
-          progress: totalProgress,
-        });
-      });
-      console.log('Embedding generation complete.');
-
-      const serializedEmbeddings = embeddings.map(arr => Array.from(arr));
-
-      console.log('Sending complete message.');
-      self.postMessage({
-        type: 'complete',
-        fileName: data.fileName,
-        chunks: chunks,
-        embeddings: serializedEmbeddings,
-      } as CompleteMessage);
-    } catch (error: any) {
-      self.postMessage({
-        type: 'error',
-        error: error.message || 'Failed to process PDF'
-      } as ErrorMessage);
+      const norm = normalize(v);
+      embeddings.push(Array.from(norm));
+      done++;
+      const progress = Math.round((done / chunks.length) * 100);
+      self.postMessage({ type: 'progress', fileName, status: 'indexing', progress });
     }
+    self.postMessage({ type: 'complete', fileName, chunks, embeddings });
+  } catch (error: any) {
+    self.postMessage({ type: 'error', fileName, error: error?.message || 'Embedding generation failed' });
   }
 };

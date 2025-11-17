@@ -1,115 +1,70 @@
-import { pipeline, Pipeline } from '@xenova/transformers';
-
-let embeddingPipeline: Pipeline | null = null;
-
-// Initialize the embedding model (runs in browser)
-export async function initEmbeddings(): Promise<Pipeline> {
-  if (!embeddingPipeline) {
-    embeddingPipeline = await pipeline(
-      'feature-extraction',
-      'Xenova/all-MiniLM-L6-v2'
-    );
-  }
-  return embeddingPipeline;
+function normalize(v: Float32Array) {
+  let n = 0;
+  for (let i = 0; i < v.length; i++) n += v[i] * v[i];
+  n = Math.sqrt(n) || 1;
+  const o = new Float32Array(v.length);
+  for (let i = 0; i < v.length; i++) o[i] = v[i] / n;
+  return o;
 }
 
-// Generate embedding for a text
+function hash(s: string) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+  }
+  return h >>> 0;
+}
+
+function tokenize(t: string) {
+  const a = t.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const b: string[] = [];
+  for (let i = 0; i < t.length - 1; i++) b.push(t.slice(i, i + 2));
+  return a.concat(b);
+}
+
 export async function generateEmbedding(text: string): Promise<Float32Array> {
-  const model = await initEmbeddings();
-  const output = await model(text, { pooling: 'mean', normalize: true });
-  return output.data;
-}
-
-// Generate embeddings for multiple texts
-export async function generateEmbeddings(
-  texts: string[],
-  onProgress?: (current: number, total: number) => void
-): Promise<Float32Array[]> {
-  const embeddings: Float32Array[] = [];
-  
-  for (let i = 0; i < texts.length; i++) {
-    const embedding = await generateEmbedding(texts[i]);
-    embeddings.push(embedding);
-    
-    if (onProgress) {
-      onProgress(i + 1, texts.length);
-    }
+  const dim = 1024;
+  const v = new Float32Array(dim);
+  const toks = tokenize(text);
+  for (const tok of toks) {
+    const idx = hash(tok) % dim;
+    v[idx] += 1;
   }
-  
-  return embeddings;
+  return normalize(v);
 }
 
-// Calculate cosine similarity between two vectors
-export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
-  if (a.length !== b.length) {
-    throw new Error('Vectors must have the same length');
-  }
-  
-  let dotProduct = 0;
-  let normA = 0;
-  let normB = 0;
-  
-  for (let i = 0; i < a.length; i++) {
-    dotProduct += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  
-  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+function cosine(a: Float32Array, b: Float32Array) {
+  let d = 0;
+  for (let i = 0; i < a.length && i < b.length; i++) d += a[i] * b[i];
+  return d;
 }
 
-// Search for most similar chunks
-export interface SearchResult {
-  chunk: string;
-  score: number;
-  index: number;
-}
-
-export async function searchSimilarChunks(
-  query: string,
-  chunks: string[],
-  embeddings: Float32Array[],
-  topK: number = 3
-): Promise<SearchResult[]> {
-  // Generate query embedding
-  const queryEmbedding = await generateEmbedding(query);
-  
-  // Calculate similarities
-  const similarities = embeddings.map((embedding, index) => ({
-    chunk: chunks[index],
-    score: cosineSimilarity(queryEmbedding, embedding),
-    index
-  }));
-  
-  // Sort by score and return top K
-  return similarities
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topK);
-}
-
-// Batch process embeddings with progress
-export async function batchGenerateEmbeddings(
-  chunks: string[],
-  batchSize: number = 10,
-  onProgress?: (progress: number) => void
-): Promise<Float32Array[]> {
-  const embeddings: Float32Array[] = [];
-  const totalBatches = Math.ceil(chunks.length / batchSize);
-  
-  for (let i = 0; i < chunks.length; i += batchSize) {
+export async function batchGenerateEmbeddings(chunks: string[], batchSize = 8, onProgress?: (progress: number) => void): Promise<Float32Array[]> {
+  const total = chunks.length;
+  let done = 0;
+  const out: Float32Array[] = [];
+  for (let i = 0; i < total; i += batchSize) {
     const batch = chunks.slice(i, i + batchSize);
-    const batchEmbeddings = await generateEmbeddings(batch);
-    embeddings.push(...batchEmbeddings);
-    
-    if (onProgress) {
-      const progress = ((i / chunks.length) * 100);
-      onProgress(progress);
+    const res = await Promise.all(batch.map((t) => generateEmbedding(t)));
+    for (const r of res) {
+      out.push(r);
+      done++;
     }
+    if (onProgress) onProgress(Math.round((done / total) * 100));
   }
-  
-  if (onProgress) {
-    onProgress(100);
+  return out;
+}
+
+export function searchSimilarChunks(queryEmbedding: Float32Array, chunks: any, embeddings: Float32Array[], topK = 3): Array<{ chunk: string; score: number }> {
+  const texts: string[] = Array.isArray(chunks) ? chunks : [];
+  const scores = embeddings.map((e, i) => ({ idx: i, score: cosine(queryEmbedding, e) }));
+  scores.sort((a, b) => b.score - a.score);
+  const k = Math.min(topK, scores.length);
+  const out: Array<{ chunk: string; score: number }> = [];
+  for (let i = 0; i < k; i++) {
+    const { idx, score } = scores[i];
+    out.push({ chunk: texts[idx] || '', score });
   }
-  
-  return embeddings;
+  return out;
 }
