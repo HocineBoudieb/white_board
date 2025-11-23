@@ -32,8 +32,8 @@ import ProgressTrackerNode from './ProgressTrackerNode';
 import { searchSimilarChunks, batchGenerateEmbeddings } from '../utils/vectorStore';
 const proOptions = { hideAttribution: true };
 
-const initialNodes: Node[] = [];
-const initialEdges: Edge[] = [];
+const defaultInitialNodes: Node[] = [];
+const defaultInitialEdges: Edge[] = [];
 
 const nodeTypes = {
   text: AiNode,
@@ -55,9 +55,10 @@ const nodeTypes = {
 
 export type WhiteboardHandle = {
   focusGroup: (id: string) => void;
+  saveNow: () => void;
 };
 
-export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: string; name: string }[]) => void }>(function Whiteboard({ onGroupsChange }, ref) {
+export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: string; name: string }[]) => void; initialNodes?: Node[]; initialEdges?: Edge[]; projectId?: string; title?: string }>(function Whiteboard({ onGroupsChange, initialNodes = defaultInitialNodes, initialEdges = defaultInitialEdges, projectId, title }, ref) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [nodeId, setNodeId] = useState(0);
@@ -67,6 +68,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
   const isDrawing = React.useRef(false);
   const currentDrawing = React.useRef<any>(null);
   const workerRef = React.useRef<Worker | null>(null);
+  const saveTimerRef = React.useRef<NodeJS.Timeout | null>(null);
 
   React.useEffect(() => {
     // Initialize the worker
@@ -138,6 +140,25 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
   }, [setNodes]);
 
   React.useEffect(() => {
+    if (!projectId) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      const serializableNodes = nodes.map((n: any) => {
+        if (n?.type === 'file' && Array.isArray(n?.data?.embeddings)) {
+          const emb = n.data.embeddings.map((e: any) => Array.isArray(e) ? e : Array.from(e));
+          return { ...n, data: { ...n.data, embeddings: emb } };
+        }
+        return n;
+      });
+      const payload = { title, nodes: serializableNodes, edges };
+      fetch(`/api/projects/${projectId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    }, 500);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [projectId, title, nodes, edges]);
+
+  React.useEffect(() => {
     const groups = nodes
       .filter((n) => n.type === 'group' && typeof (n as any).data?.name === 'string' && (n as any).data.name.trim().length > 0)
       .map((n) => ({ id: n.id, name: ((n as any).data.name as string).trim() }));
@@ -157,6 +178,19 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
         const cy = node.position.y + h / 2;
         (reactFlow as any).setCenter?.(cx, cy, { zoom: 1.2, duration: 600 });
       }
+    },
+    saveNow: () => {
+      if (!projectId) return;
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      const serializableNodes = (nodes as any[]).map((n: any) => {
+        if (n?.type === 'file' && Array.isArray(n?.data?.embeddings)) {
+          const emb = n.data.embeddings.map((e: any) => (Array.isArray(e) ? e : Array.from(e)));
+          return { ...n, data: { ...n.data, embeddings: emb } };
+        }
+        return n;
+      });
+      const payload = { title, nodes: serializableNodes, edges };
+      fetch(`/api/projects/${projectId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     },
   }));
 
@@ -298,6 +332,18 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
 
       setNodes((nodes) => nodes.concat(loadingNode));
 
+      const content = `${context ? `${context}\n\n` : ''}${text}\n\nIMPORTANT: Respond ONLY with a valid JSON array of nodes. Do not include any other text, explanation, or markdown formatting.\n\nEach node should have this structure:\n{\n  "type": "markdown" | "todo" | "image" | "drawing" | "mermaid" | "flashcard" | "quiz" | "timeline" | "definition" | "formula" | "comparison" | "progress",\n  "data": { ... }\n}\n\nAvailable node types:\n- markdown: { "text": "markdown content" }\n- todo: { "items": [{ "text": "item text", "completed": false }] }\n- image: { "url": "image url" }\n- drawing: { "lines": [[{"x": 0, "y": 0}, {"x": 10, "y": 10}]] }\n- mermaid: { "text": "mermaid diagram syntax" }\n- flashcard: { "front": "recto", "back": "verso" }\n- quiz: { "question": "Q?", "choices": [{ "id": "1", "text": "A", "correct": true }, { "id": "2", "text": "B", "correct": false }], "explanation": "optional" }\n- timeline: { "events": [{ "id": "1", "date": "2024-01-01", "title": "Event", "description": "optional" }] }\n- definition: { "term": "Mot", "definition": "Définition", "example": "optional", "tags": ["tag1"] }\n- formula: { "latex": "a + b", "variables": { "a": 1, "b": 2 } }\n- comparison: { "headers": ["A", "B"], "rows": [{ "id": "1", "label": "Critère", "col1": "val A", "col2": "val B" }] }\n- progress: { "current": 75, "milestones": [{ "id": "1", "label": "Done", "completed": true }], "stats": [{ "label": "Heures", "value": "12h" }] }\n\nExample response:\n[\n  {\n    "type": "markdown",\n    "data": {\n      "text": "# Hello\\nThis is markdown"\n    }\n  },\n  {\n    "type": "todo",\n    "data": {\n      "items": [\n        { "text": "Task 1", "completed": false },\n        { "text": "Task 2", "completed": true }\n      ]\n    }\n  }\n]\n\nRespond with ONLY the JSON array, nothing else.`;
+
+      console.log('AI request (text):', text);
+      console.log('AI request (context length):', context ? context.length : 0);
+      if (context && typeof context === 'string') {
+        console.log('AI request (context head 200):', context.slice(0, 200));
+        console.log('AI request (context tail 200):', context.slice(Math.max(0, context.length - 200)));
+      }
+      console.log('AI request (full content length):', content.length);
+      console.log('AI request (full content head 200):', content.slice(0, 200));
+      console.log('AI request (full content tail 200):', content.slice(Math.max(0, content.length - 200)));
+
       fetch('/api/groq', {
         method: 'POST',
         headers: {
@@ -307,50 +353,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
           messages: [
             { 
               role: 'user', 
-              content: `${context ? `${context}\n\n` : ''}${text}
-
-IMPORTANT: Respond ONLY with a valid JSON array of nodes. Do not include any other text, explanation, or markdown formatting.
-
-Each node should have this structure:
-{
-  "type": "markdown" | "todo" | "image" | "drawing" | "mermaid" | "flashcard" | "quiz" | "timeline" | "definition" | "formula" | "comparison" | "progress",
-  "data": { ... }
-}
-
-Available node types:
-- markdown: { "text": "markdown content" }
-- todo: { "items": [{ "text": "item text", "completed": false }] }
-- image: { "url": "image url" }
-- drawing: { "lines": [[{"x": 0, "y": 0}, {"x": 10, "y": 10}]] }
-- mermaid: { "text": "mermaid diagram syntax" }
-- flashcard: { "front": "recto", "back": "verso" }
-- quiz: { "question": "Q?", "choices": [{ "id": "1", "text": "A", "correct": true }, { "id": "2", "text": "B", "correct": false }], "explanation": "optional" }
-- timeline: { "events": [{ "id": "1", "date": "2024-01-01", "title": "Event", "description": "optional" }] }
-- definition: { "term": "Mot", "definition": "Définition", "example": "optional", "tags": ["tag1"] }
-- formula: { "latex": "a + b", "variables": { "a": 1, "b": 2 } }
-- comparison: { "headers": ["A", "B"], "rows": [{ "id": "1", "label": "Critère", "col1": "val A", "col2": "val B" }] }
-- progress: { "current": 75, "milestones": [{ "id": "1", "label": "Done", "completed": true }], "stats": [{ "label": "Heures", "value": "12h" }] }
-
-Example response:
-[
-  {
-    "type": "markdown",
-    "data": {
-      "text": "# Hello\\nThis is markdown"
-    }
-  },
-  {
-    "type": "todo",
-    "data": {
-      "items": [
-        { "text": "Task 1", "completed": false },
-        { "text": "Task 2", "completed": true }
-      ]
-    }
-  }
-]
-
-Respond with ONLY the JSON array, nothing else.` 
+              content: content 
             },
           ],
         }),
@@ -401,17 +404,23 @@ Respond with ONLY the JSON array, nothing else.`
           }
         }
 
-        // Une fois le stream terminé, parser le JSON et créer les nodes
         try {
-          // Nettoyer le texte (enlever markdown code blocks si présent)
           let cleanedText = fullText.trim();
           if (cleanedText.startsWith('```json')) {
             cleanedText = cleanedText.replace(/^```json\s*/, '').replace(/```\s*$/, '');
           } else if (cleanedText.startsWith('```')) {
             cleanedText = cleanedText.replace(/^```\s*/, '').replace(/```\s*$/, '');
           }
-
+          console.log('AI response (raw):', cleanedText);
+          console.log('AI response (raw length):', cleanedText.length);
+          console.log('AI response (raw head 200):', cleanedText.slice(0, 200));
+          console.log('AI response (raw tail 200):', cleanedText.slice(Math.max(0, cleanedText.length - 200)));
+          console.log('AI response (raw bracket balance):', {
+            square: (cleanedText.match(/\[/g) || []).length - (cleanedText.match(/\]/g) || []).length,
+            curly: (cleanedText.match(/\{/g) || []).length - (cleanedText.match(/\}/g) || []).length,
+          });
           const nodesData = JSON.parse(cleanedText);
+          console.log('AI response (parsed):', nodesData);
 
           if (!Array.isArray(nodesData)) {
             throw new Error('Response is not an array');

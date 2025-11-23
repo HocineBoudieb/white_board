@@ -12,6 +12,7 @@
     "@ai-sdk/openai": "^2.0.65",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
+    "@prisma/client": "^5.17.0",
     "@reactflow/node-resizer": "^2.2.14",
     "@types/paper": "^0.11.14",
     "@types/recharts": "^1.8.29",
@@ -19,6 +20,8 @@
     "@xenova/transformers": "^2.17.2",
     "ai": "^5.0.93",
     "easymde": "^2.20.0",
+    "firebase": "^12.6.0",
+    "firebase-admin": "^13.6.0",
     "formidable": "^3.5.4",
     "groq-sdk": "^0.35.0",
     "jsdom": "^27.2.0",
@@ -36,6 +39,7 @@
     "react-simplemde-editor": "^5.2.0",
     "reactflow": "^11.11.4",
     "recharts": "^3.4.1",
+    "sqlite3": "^5.1.7",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
@@ -50,6 +54,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.0.1",
     "jest": "^30.2.0",
+    "prisma": "^5.17.0",
     "tailwindcss": "^4",
     "ts-jest": "^29.4.5",
     "typescript": "^5"

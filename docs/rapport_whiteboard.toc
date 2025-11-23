@@ -1,0 +1,43 @@
+\babel@toc {french}{}\relax 
+\contentsline {chapter}{\numberline {1}Introduction}{1}{chapter.1}%
+\contentsline {section}{\numberline {1.1}Contexte}{1}{section.1.1}%
+\contentsline {section}{\numberline {1.2}Objectifs de l'analyse}{1}{section.1.2}%
+\contentsline {section}{\numberline {1.3}Méthodologie}{1}{section.1.3}%
+\contentsline {chapter}{\numberline {2}Description technique du whiteboard}{2}{chapter.2}%
+\contentsline {section}{\numberline {2.1}Fonctionnalités principales}{2}{section.2.1}%
+\contentsline {section}{\numberline {2.2}Architecture système}{2}{section.2.2}%
+\contentsline {subsection}{\numberline {2.2.1}Vue d'ensemble}{2}{subsection.2.2.1}%
+\contentsline {subsection}{\numberline {2.2.2}Modèle de données des nœuds}{3}{subsection.2.2.2}%
+\contentsline {subsection}{\numberline {2.2.3}Technologies utilisées}{3}{subsection.2.2.3}%
+\contentsline {subsection}{\numberline {2.2.4}Cas d'utilisation typiques}{3}{subsection.2.2.4}%
+\contentsline {section}{\numberline {2.3}Diagrammes techniques}{4}{section.2.3}%
+\contentsline {subsection}{\numberline {2.3.1}UML des principaux composants}{4}{subsection.2.3.1}%
+\contentsline {subsection}{\numberline {2.3.2}Captures d'écran annotées}{4}{subsection.2.3.2}%
+\contentsline {chapter}{\numberline {3}Analyse comparative}{5}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Avantages face à un assistant conversationnel classique}{5}{section.3.1}%
+\contentsline {subsection}{\numberline {3.1.1}Capacités visuelles et spatiales}{5}{subsection.3.1.1}%
+\contentsline {subsection}{\numberline {3.1.2}Interaction multimodale}{5}{subsection.3.1.2}%
+\contentsline {subsection}{\numberline {3.1.3}Collaboration en temps réel}{5}{subsection.3.1.3}%
+\contentsline {subsection}{\numberline {3.1.4}Personnalisation de l'interface}{5}{subsection.3.1.4}%
+\contentsline {section}{\numberline {3.2}Différenciation par rapport à l'état de l'art}{6}{section.3.2}%
+\contentsline {subsection}{\numberline {3.2.1}Revue des solutions existantes}{6}{subsection.3.2.1}%
+\contentsline {subsection}{\numberline {3.2.2}Benchmark des performances}{6}{subsection.3.2.2}%
+\contentsline {subsection}{\numberline {3.2.3}Innovations clés}{6}{subsection.3.2.3}%
+\contentsline {subsection}{\numberline {3.2.4}Limites et axes d'amélioration}{6}{subsection.3.2.4}%
+\contentsline {chapter}{\numberline {4}Études de cas}{8}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Préparation d'un module pédagogique}{8}{section.4.1}%
+\contentsline {section}{\numberline {4.2}Analyse documentaire et synthèse}{8}{section.4.2}%
+\contentsline {section}{\numberline {4.3}Exemple d'implémentation}{8}{section.4.3}%
+\contentsline {section}{\numberline {4.4}Mesures d'impact}{9}{section.4.4}%
+\contentsline {subsection}{\numberline {4.4.1}Indicateurs quantitatifs}{9}{subsection.4.4.1}%
+\contentsline {subsection}{\numberline {4.4.2}Retours utilisateurs}{9}{subsection.4.4.2}%
+\contentsline {chapter}{\numberline {5}Perspectives et recommandations}{10}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Évolutions potentielles}{10}{section.5.1}%
+\contentsline {section}{\numberline {5.2}Applications émergentes}{10}{section.5.2}%
+\contentsline {section}{\numberline {5.3}Feuille de route}{10}{section.5.3}%
+\contentsline {chapter}{\numberline {6}Glossaire}{11}{chapter.6}%
+\contentsline {chapter}{\numberline {7}Bibliographie}{12}{chapter.7}%
+\contentsline {chapter}{\numberline {A}Données brutes des benchmarks}{14}{appendix.A}%
+\contentsline {section}{\numberline {A.1}Protocole}{14}{section.A.1}%
+\contentsline {section}{\numberline {A.2}Séries de mesures}{14}{section.A.2}%
+\contentsline {chapter}{\numberline {B}Index}{15}{appendix.B}%
