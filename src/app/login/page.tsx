@@ -19,7 +19,14 @@ export default function LoginPage() {
       if (user) {
         const token = await user.getIdToken().catch(() => '');
         const res = await fetch('/api/auth/upsert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid: user.uid, email: user.email || '', name: user.displayName || '', idToken: token }) });
-        if (res.ok) router.replace('/projects');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.hasSubscription) {
+            router.replace('/projects');
+          } else {
+            router.replace('/pricing');
+          }
+        }
       }
     });
     return () => unsub();
@@ -31,7 +38,14 @@ export default function LoginPage() {
       if (user) {
         const token = await user.getIdToken().catch(() => '');
         const res = await fetch('/api/auth/upsert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid: user.uid, email: user.email || '', name: user.displayName || '', idToken: token }) });
-        if (res.ok) router.replace('/projects');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.hasSubscription) {
+            router.replace('/projects');
+          } else {
+            router.replace('/pricing');
+          }
+        }
       }
     }).catch(() => {});
   }, [router]);

@@ -29,6 +29,7 @@ import DefinitionCardNode from './DefinitionCardNode';
 import FormulaNode from './FormulaNode';
 import ComparisonTableNode from './ComparisonTableNode';
 import ProgressTrackerNode from './ProgressTrackerNode';
+import { LimitModal } from './LimitModal';
 import { searchSimilarChunks, batchGenerateEmbeddings } from '../utils/vectorStore';
 const proOptions = { hideAttribution: true };
 
@@ -58,10 +59,11 @@ export type WhiteboardHandle = {
   saveNow: () => void;
 };
 
-export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: string; name: string }[]) => void; initialNodes?: Node[]; initialEdges?: Edge[]; projectId?: string; title?: string }>(function Whiteboard({ onGroupsChange, initialNodes = defaultInitialNodes, initialEdges = defaultInitialEdges, projectId, title }, ref) {
+export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: string; name: string }[]) => void; initialNodes?: Node[]; initialEdges?: Edge[]; projectId?: string; title?: string; userStatus?: any }>(function Whiteboard({ onGroupsChange, initialNodes = defaultInitialNodes, initialEdges = defaultInitialEdges, projectId, title, userStatus }, ref) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [nodeId, setNodeId] = useState(0);
+  const [showLimitModal, setShowLimitModal] = useState(false);
   const reactFlow = useReactFlow();
   const { screenToFlowPosition, getNodes, getNode } = reactFlow;
   const lastClickTime = React.useRef(0);
@@ -358,6 +360,17 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
           ],
         }),
       }).then(async (response) => {
+        if (response.status === 403) {
+          setShowLimitModal(true);
+          setNodes((nodes) =>
+            nodes.map((node) =>
+              node.id === loadingId
+                ? { ...node, data: { ...node.data, text: '🔒 Abonnement requis. Mettez à niveau pour utiliser l\'IA.' } }
+                : node
+            )
+          );
+          return;
+        }
         if (!response.body) return;
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -758,6 +771,12 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
   const onNodeDoubleClick = useCallback(
     (event: any, node: any) => {
       if (node.type === 'group') {
+        // Check AI permission
+        if (!userStatus || userStatus.plan.aiTokens === 0) {
+          setShowLimitModal(true);
+          return;
+        }
+
         const position = screenToFlowPosition({
           x: event.clientX,
           y: event.clientY,
@@ -927,6 +946,11 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
         <MiniMap />
         <Background color="#ccc" variant={BackgroundVariant.Dots} gap={12} size={1} />
       </ReactFlow>
+      <LimitModal 
+        isOpen={showLimitModal} 
+        onClose={() => setShowLimitModal(false)} 
+        description="Vous avez atteint la limite de votre plan. Passez à la vitesse supérieure pour utiliser l'IA et créer plus de contenu."
+      />
     </div>
   );
 });

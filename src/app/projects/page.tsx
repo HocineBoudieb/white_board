@@ -2,9 +2,24 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Plus, Search, MoreVertical, Clock, Filter, Pencil, Check, X } from 'lucide-react';
+import { ArrowRight, Plus, Search, MoreVertical, Clock, Filter, Pencil, Check, X, Lock, Zap, Settings } from 'lucide-react';
 import { auth } from '@/lib/firebase';
 import { signOut } from 'firebase/auth';
+
+interface UserStatus {
+  plan: {
+    name: string;
+    slug: string;
+    quota: number;
+    aiTokens: number;
+  };
+  usage: {
+    projects: number;
+    aiTokens: number;
+  };
+}
+
+import { LimitModal } from '@/components/LimitModal';
 
 export default function ProjectsPage() {
   const [projects, setProjects] = React.useState<any[]>([]);
@@ -22,18 +37,39 @@ export default function ProjectsPage() {
   const [editingTitle, setEditingTitle] = React.useState<string>('');
   const [renamingId, setRenamingId] = React.useState<string | null>(null);
   const [openingId, setOpeningId] = React.useState<string | null>(null);
+  const [userStatus, setUserStatus] = React.useState<UserStatus | null>(null);
+  const [showLimitModal, setShowLimitModal] = React.useState(false);
 
   const load = React.useCallback(async () => {
     setLoadingProjects(true);
-    const res = await fetch('/api/projects');
-    if (!res.ok) {
+    
+    // Fetch user status in parallel
+    const statusPromise = fetch('/api/user/status').then(res => res.ok ? res.json() : null);
+    const projectsPromise = fetch('/api/projects').then(res => {
+      if (!res.ok && res.status === 401) {
+        throw new Error('Unauthorized');
+      }
+      return res.json();
+    });
+
+    try {
+      const [statusData, projectsData] = await Promise.all([statusPromise, projectsPromise]);
+      
+      if (statusData) {
+        if (statusData.hasSelectedPlan === false) {
+          router.replace('/pricing');
+          return;
+        }
+        setUserStatus(statusData);
+      }
+      
+      setProjects(Array.isArray(projectsData) ? projectsData : []);
+    } catch (e) {
       router.replace('/login');
-      return;
+    } finally {
+      setLoadingProjects(false);
     }
-    const data = await res.json();
-    setProjects(Array.isArray(data) ? data : []);
-    setLoadingProjects(false);
-  }, []);
+  }, [router]);
 
   React.useEffect(() => {
     const cookieUid = typeof document !== 'undefined' ? (document.cookie.split('; ').find((c) => c.startsWith('uid='))?.split('=')[1] || '') : '';
@@ -58,6 +94,8 @@ export default function ProjectsPage() {
           navigated = true;
           router.push(`/projects/${data.id}`);
         }
+      } else if (res.status === 403) {
+        setShowLimitModal(true);
       }
     } finally {
       if (!navigated) {
@@ -152,16 +190,33 @@ export default function ProjectsPage() {
           <span className="text-2xl font-black tracking-tighter">FRAYM.</span>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-xs font-bold text-gray-600">{uid}</span>
-          <a href="/login" className="text-xs font-bold underline">Se connecter</a>
+          <span className="text-xs font-bold text-gray-600 hidden md:inline">{uid}</span>
+          
+          {userStatus && (
+            <div className="hidden md:flex items-center gap-3 mr-2">
+              <div className="flex flex-col items-end">
+                <div className="text-xs font-black uppercase tracking-wider">{userStatus.plan.name}</div>
+                <div className="text-[10px] font-mono font-bold text-gray-500">
+                  {userStatus.usage.projects} / {userStatus.plan.quota === Infinity ? '∞' : userStatus.plan.quota} Boards
+                </div>
+              </div>
+            </div>
+          )}
+
+          <a href="/pricing" className="text-xs font-bold px-3 py-1 border-2 border-black bg-primary shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] transition-all flex items-center gap-2">
+            <Zap size={12} className="fill-black" /> Abonnement
+          </a>
+          <button onClick={() => router.push('/settings')} className="text-xs font-bold px-3 py-1 border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] transition-all flex items-center gap-2">
+            <Settings size={12} /> Paramètres
+          </button>
           <button onClick={logout} className="text-xs font-bold px-3 py-1 border-2 border-black bg-white shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[1px] hover:translate-y-[1px] transition-all">Se déconnecter</button>
         </div>
       </nav>
       <main className="max-w-7xl mx-auto px-6 py-12">
         <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-6">
           <div className="relative w-full md:w-auto">
-            <h1 className="text-6xl md:text-7xl font-black mb-2 relative z-10">Mes Boards<span className="text-yellow-400">.</span></h1>
-            <div className="h-4 w-full bg-yellow-300 absolute bottom-2 left-2 opacity-50 transform -skew-x-12"></div>
+            <h1 className="text-6xl md:text-7xl font-black mb-2 relative z-10">Mes Boards<span className="text-primary-foreground">.</span></h1>
+            <div className="h-4 w-full bg-primary absolute bottom-2 left-2 opacity-50 transform -skew-x-12"></div>
             <p className="text-xl font-bold text-gray-500 mt-2 font-mono">Construisons quelque chose aujourd'hui.</p>
           </div>
           <div className="flex gap-4 w-full md:w-auto">
@@ -187,7 +242,7 @@ export default function ProjectsPage() {
             { label: 'A-Z', key: 'AZ' as const },
             { label: 'Récents', key: 'Recent' as const },
           ].map((t) => (
-            <button key={t.key} onClick={() => setFilter(t.key)} disabled={!!openingId} className={`px-4 py-1 font-bold border-2 rounded-lg transition-all whitespace-nowrap ${filter === t.key ? 'bg-black text-white border-black shadow-[4px_4px_0px_0px_rgba(100,100,100,1)]' : 'bg-white border-black hover:bg-yellow-100 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'} disabled:opacity-60 disabled:cursor-not-allowed`}>{t.label}</button>
+            <button key={t.key} onClick={() => setFilter(t.key)} disabled={!!openingId} className={`px-4 py-1 font-bold border-2 rounded-lg transition-all whitespace-nowrap ${filter === t.key ? 'bg-black text-white border-black shadow-[4px_4px_0px_0px_rgba(100,100,100,1)]' : 'bg-white border-black hover:bg-primary/30 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]'} disabled:opacity-60 disabled:cursor-not-allowed`}>{t.label}</button>
           ))}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -219,20 +274,20 @@ export default function ProjectsPage() {
               <div
                 key={p.id}
                 onClick={() => { if (!openingId) { setOpeningId(p.id); router.push(`/projects/${p.id}`); } }}
-                className="group relative h-80 bg-yellow-50 border-4 border-black flex flex-col shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-2 transition-all duration-300 cursor-pointer rounded-xl overflow-hidden"
+                className="group relative h-80 bg-white border-4 border-black flex flex-col shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-2 transition-all duration-300 cursor-pointer rounded-xl overflow-hidden"
               >
                 <div
-                  className={`h-40 w-full border-b-4 border-black relative bg-yellow-300 overflow-hidden`}
+                  className={`h-40 w-full border-b-4 border-black relative bg-primary overflow-hidden`}
                 >
                   <div
                     className="absolute inset-0 opacity-30"
                     style={{
                       backgroundImage:
                         i % 3 === 0
-                          ? 'linear-gradient(#facc15 1px, transparent 1px), linear-gradient(90deg, #facc15 1px, transparent 1px)'
+                          ? 'linear-gradient(var(--primary) 1px, transparent 1px), linear-gradient(90deg, var(--primary) 1px, transparent 1px)'
                           : i % 3 === 1
-                          ? 'radial-gradient(#facc15 2px, transparent 2px)'
-                          : 'repeating-linear-gradient(45deg, #facc15, #facc15 1px, transparent 1px, transparent 10px)',
+                          ? 'radial-gradient(var(--primary) 2px, transparent 2px)'
+                          : 'repeating-linear-gradient(45deg, var(--primary), var(--primary) 1px, transparent 1px, transparent 10px)',
                       backgroundSize: '20px 20px',
                     }}
                   />
@@ -339,6 +394,12 @@ export default function ProjectsPage() {
           </div>
         </div>
       )}
+
+      <LimitModal 
+        isOpen={showLimitModal} 
+        onClose={() => setShowLimitModal(false)} 
+        description="Vous avez atteint le nombre maximum de boards autorisés pour votre plan actuel. Passez à la vitesse supérieure pour créer plus de projets."
+      />
     </div>
   );
 }

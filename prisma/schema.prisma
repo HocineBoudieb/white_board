@@ -18,10 +18,18 @@ model Project {
 }
 
 model User {
-  id        String   @id
-  email     String?  @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  projects  Project[]
+  id               String   @id
+  email            String?  @unique
+  name             String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  projects         Project[]
+
+  stripeCustomerId       String?   @unique
+  stripeSubscriptionId   String?   @unique
+  stripePriceId          String?
+  stripeCurrentPeriodEnd DateTime?
+
+  aiTokensUsed           Int       @default(0)
+  preferences            Json?
 }

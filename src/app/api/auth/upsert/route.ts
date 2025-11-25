@@ -8,13 +8,20 @@ export async function POST(req: Request) {
   const email = typeof body?.email === 'string' ? body.email : undefined;
   const name = typeof body?.name === 'string' ? body.name : undefined;
   if (!uid) return NextResponse.json({ error: 'uid required' }, { status: 400 });
+  let user;
   try {
-    await prisma.user.upsert({ where: { id: uid }, update: { email, name }, create: { id: uid, email, name } });
+    user = await prisma.user.upsert({ 
+      where: { id: uid }, 
+      update: { email, name }, 
+      create: { id: uid, email, name } 
+    });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Database error';
     return NextResponse.json({ error: 'DB_AUTH_FAILED', message }, { status: 500 });
   }
-  const res = NextResponse.json({ ok: true });
+  
+  const hasSubscription = !!(user.stripePriceId || user.stripeSubscriptionId);
+  const res = NextResponse.json({ ok: true, hasSubscription });
   res.cookies.set('uid', uid, { path: '/', maxAge: 60 * 60 * 24 * 30 });
   return res;
 }

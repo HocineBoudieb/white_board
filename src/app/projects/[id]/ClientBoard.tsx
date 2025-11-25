@@ -15,7 +15,7 @@ function fixEmbeddings(nodes: any[]): any[] {
   });
 }
 
-export default function ClientBoard({ id, initialTitle, initialNodes, initialEdges }: { id: string; initialTitle: string; initialNodes: Node[] | any[]; initialEdges: Edge[] | any[] }) {
+export default function ClientBoard({ id, initialTitle, initialNodes, initialEdges, userStatus }: { id: string; initialTitle: string; initialNodes: Node[] | any[]; initialEdges: Edge[] | any[]; userStatus?: any }) {
   const [title, setTitle] = React.useState<string>(initialTitle || 'Titre');
   const [collapsed, setCollapsed] = React.useState<boolean>(false);
   const [groups, setGroups] = React.useState<{ id: string; name: string }[]>([]);
@@ -116,6 +116,7 @@ export default function ClientBoard({ id, initialTitle, initialNodes, initialEdg
           initialEdges={(Array.isArray(initialEdges) ? initialEdges : []) as any}
           projectId={id}
           title={title}
+          userStatus={userStatus}
         />
       </ReactFlowProvider>
     </main>
