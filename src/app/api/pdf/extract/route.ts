@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
       const result = await parseFn(buffer);
       text = result?.text || '';
     } catch {
+      // @ts-ignore
       const pdfjs: any = await import('pdfjs-dist/build/pdf.mjs');
       const loadingTask = pdfjs.getDocument({ data: buffer, disableWorker: true });
       const pdf = await loadingTask.promise;

@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import ReactFlow, {
   MiniMap,
   Controls,
@@ -62,7 +63,6 @@ export type WhiteboardHandle = {
 export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: string; name: string }[]) => void; initialNodes?: Node[]; initialEdges?: Edge[]; projectId?: string; title?: string; userStatus?: any }>(function Whiteboard({ onGroupsChange, initialNodes = defaultInitialNodes, initialEdges = defaultInitialEdges, projectId, title, userStatus }, ref) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const [nodeId, setNodeId] = useState(0);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const reactFlow = useReactFlow();
   const { screenToFlowPosition, getNodes, getNode } = reactFlow;
@@ -198,8 +198,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
 
   const handleFileDrop = useCallback(
     (file: File, parentNodeId: string) => {
-      const newId = `file-${nodeId + 1}`;
-      setNodeId((prev) => prev + 1);
+      const newId = `file-${uuidv4()}`;
 
       const parentNode = getNode(parentNodeId);
       if (!parentNode) return;
@@ -230,6 +229,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
         const fileContent = event.target?.result as ArrayBuffer;
         setNodes((nds) => nds.map((n) => (n.id === newId ? { ...n, data: { ...n.data, status: 'indexing', progress: 20 } } : n)));
         try {
+          // @ts-ignore
           const pdfjs: any = await import('pdfjs-dist/build/pdf.min.mjs').catch(async () => await import('pdfjs-dist/build/pdf.mjs'));
           pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
           const loadingTask = pdfjs.getDocument({ data: fileContent });
@@ -266,7 +266,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
       };
       reader.readAsArrayBuffer(file);
     },
-    [nodeId, setNodes, getNode]
+    [setNodes, getNode]
   );
 
   const onConnect = useCallback(
@@ -315,8 +315,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
       if (!originNode) return;
 
       // Créer un node de chargement temporaire
-      const loadingId = `loading-${nodeId + 1}`;
-      setNodeId((prev) => prev + 1);
+      const loadingId = `loading-${uuidv4()}`;
 
       const loadingNode: Node = {
         id: loadingId,
@@ -442,7 +441,6 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
           // Supprimer le node de chargement
           setNodes((nodes) => nodes.filter((n) => n.id !== loadingId));
 
-          let currentNodeId = nodeId + 1;
           const newNodes: Node[] = [];
           const parent = originNode.parentNode ? getNode(originNode.parentNode) : null;
           const padding = 16;
@@ -467,8 +465,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
           const parentHeight = parent ? (((parent.style as any)?.height ?? (parent as any).height) || 150) : Infinity;
 
           nodesData.forEach((nodeData: any, index: number) => {
-            const newId = `node-${currentNodeId}`;
-            currentNodeId++;
+            const newId = `node-${uuidv4()}`;
 
             let newNode: Node | null = null;
             const type = nodeData.type;
@@ -681,7 +678,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
           );
         }
       });
-    }, [getNode, nodeId, setNodes]);
+    }, [getNode, setNodes]);
 
   const onPaneClick = useCallback(
     (event: any) => {
@@ -692,8 +689,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
           y: event.clientY,
         });
 
-        const newId = nodeId + 1;
-        setNodeId(newId);
+        const newId = uuidv4();
 
         const newNode = {
           id: `node-${newId}`,
@@ -707,7 +703,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
       }
       lastClickTime.current = clickTime;
     },
-    [nodeId, screenToFlowPosition, setNodes],
+    [screenToFlowPosition, setNodes],
   );
 
   const onMouseDown = (event: React.MouseEvent) => {
@@ -715,8 +711,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
     isDrawing.current = true;
     const point = screenToFlowPosition({ x: event.clientX, y: event.clientY });
 
-    const newId = `drawing-${nodeId + 1}`;
-    setNodeId((prev) => prev + 1);
+    const newId = `drawing-${uuidv4()}`;
 
     const targetGroup = getNodes().find(
       (node) =>
@@ -731,7 +726,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
       ? { x: point.x - targetGroup.position.x, y: point.y - targetGroup.position.y }
       : point;
 
-    const newDrawingNode = {
+    const newDrawingNode: Node = {
       id: newId,
       type: 'drawing',
       position: localPosition,
@@ -782,10 +777,9 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
           y: event.clientY,
         });
 
-        const newId = nodeId + 1;
-        setNodeId(newId);
+        const newId = uuidv4();
 
-        const newNode = {
+        const newNode: Node = {
           id: `node-${newId}`,
           position: {
             x: position.x - node.position.x,
@@ -803,7 +797,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
         setNodes((nodes) => nodes.concat(newNode));
       }
     },
-    [nodeId, screenToFlowPosition, setNodes, handleAiNodeSubmit],
+    [screenToFlowPosition, setNodes, handleAiNodeSubmit],
   );
   
   return (

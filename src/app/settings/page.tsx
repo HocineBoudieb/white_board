@@ -18,6 +18,10 @@ interface UserStatus {
     quota: number;
     aiTokens: number;
   };
+  usage?: {
+    projects: number;
+    aiTokens: number;
+  };
 }
 
 export default function SettingsPage() {
@@ -220,14 +224,22 @@ export default function SettingsPage() {
                       </button>
                     </div>
                   ) : (
-                    <button
-                      onClick={openPortal}
-                      disabled={portalLoading}
-                      className="w-full py-4 bg-white text-black font-black uppercase tracking-widest border-4 border-black hover:bg-gray-100 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center gap-2"
-                    >
-                      {portalLoading ? <Loader2 className="animate-spin" /> : <CreditCard size={20} />}
-                      Gérer mon abonnement
-                    </button>
+                    <div className="flex flex-col gap-4">
+                      <button
+                        onClick={openPortal}
+                        disabled={portalLoading}
+                        className="w-full py-4 bg-white text-black font-black uppercase tracking-widest border-4 border-black hover:bg-gray-100 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center gap-2"
+                      >
+                        {portalLoading ? <Loader2 className="animate-spin" /> : <CreditCard size={20} />}
+                        Gérer mon abonnement
+                      </button>
+                      <button
+                        onClick={() => router.push('/pricing')}
+                        className="w-full py-4 bg-white text-black font-bold uppercase tracking-widest border-4 border-transparent hover:border-black transition-all flex items-center justify-center gap-2"
+                      >
+                        Changer de plan
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>

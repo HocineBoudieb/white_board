@@ -1,34 +1,76 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PLANS } from '@/utils/subscription';
 import { Check, Loader2, ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
+interface UserStatus {
+  hasSelectedPlan: boolean;
+  plan: {
+    name: string;
+    slug: string;
+    quota: number;
+    aiTokens: number;
+  };
+}
+
 export default function PricingPage() {
   const [loading, setLoading] = useState<string | null>(null);
+  const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
   const router = useRouter();
 
+  useEffect(() => {
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch('/api/user/status');
+        if (res.ok) {
+          const data = await res.json();
+          setUserStatus(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch user status:', error);
+      }
+    };
+    fetchStatus();
+  }, []);
+
   const handleSubscribe = async (priceId: string) => {
-    if (!priceId) return; // Free plan
+    if (!priceId) return;
     setLoading(priceId);
     try {
-      const response = await fetch('/api/stripe/checkout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ priceId }),
-      });
+      // Check if updating existing subscription
+      if (userStatus?.hasSelectedPlan && userStatus.plan.slug !== 'free') {
+        const res = await fetch('/api/stripe/subscription', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ priceId }),
+        });
+        
+        if (res.ok) {
+          // Refresh status and UI
+          const updated = await fetch('/api/user/status').then(r => r.json());
+          setUserStatus(updated);
+        } else {
+           console.error('Update failed');
+        }
+      } else {
+        // New subscription
+        const response = await fetch('/api/stripe/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ priceId }),
+        });
 
-      if (response.status === 401) {
-          router.push('/login');
-          return;
-      }
+        if (response.status === 401) {
+            router.push('/login');
+            return;
+        }
 
-      const data = await response.json();
-      if (data.url) {
-        window.location.href = data.url;
+        const data = await response.json();
+        if (data.url) {
+          window.location.href = data.url;
+        }
       }
     } catch (error) {
       console.error('Error:', error);
@@ -40,13 +82,27 @@ export default function PricingPage() {
   const handleSelectFree = async () => {
     setLoading('free');
     try {
-      const res = await fetch('/api/plans/select', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planSlug: 'free' }),
-      });
-      if (res.ok) {
-        router.push('/projects');
+      if (userStatus?.hasSelectedPlan && userStatus.plan.slug !== 'free') {
+        // Cancel subscription
+        const res = await fetch('/api/stripe/subscription', {
+          method: 'DELETE',
+        });
+        if (res.ok) {
+           // Refresh status
+           const updated = await fetch('/api/user/status').then(r => r.json());
+           setUserStatus(updated);
+           // Maybe show a message?
+        }
+      } else {
+        // Just selecting free plan initially (if logic requires it)
+        const res = await fetch('/api/plans/select', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ planSlug: 'free' }),
+        });
+        if (res.ok) {
+            router.push('/projects');
+        }
       }
     } catch (error) {
       console.error('Error selecting free plan:', error);
@@ -54,6 +110,7 @@ export default function PricingPage() {
       setLoading(null);
     }
   };
+
 
 
   return (
@@ -130,17 +187,24 @@ export default function PricingPage() {
                 </ul>
               </div>
 
-              <button
-                onClick={() => plan.slug === 'free' ? handleSelectFree() : handleSubscribe(plan.price.priceIds.test)}
-                disabled={loading !== null}
+                  <button
+                onClick={() => {
+                  if (userStatus?.plan.slug === plan.slug) return;
+                  plan.slug === 'free' ? handleSelectFree() : handleSubscribe(plan.price.priceIds.test);
+                }}
+                disabled={loading !== null || userStatus?.plan.slug === plan.slug}
                 className={`w-full py-4 border-4 border-black font-black text-lg uppercase tracking-widest transition-all ${
-                  plan.slug === 'pro'
+                  userStatus?.plan.slug === plan.slug
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-400 shadow-none'
+                    : plan.slug === 'pro'
                     ? 'bg-black text-white hover:bg-primary hover:text-black hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'
                     : 'bg-white text-black hover:bg-black hover:text-white hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'
                 } disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none disabled:hover:translate-x-0 disabled:hover:translate-y-0`}
               >
                 {loading === plan.price.priceIds.test || (plan.slug === 'free' && loading === 'free') ? (
                   <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                ) : userStatus?.plan.slug === plan.slug ? (
+                  'Plan Actuel'
                 ) : plan.slug === 'free' ? (
                   'Choisir'
                 ) : (

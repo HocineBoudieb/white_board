@@ -1,6 +1,6 @@
 /* eslint-disable */
 
-declare const self: DedicatedWorkerGlobalScope;
+// declare const self: any;
 
 function normalize(vec: Float32Array): Float32Array {
   let norm = 0;

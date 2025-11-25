@@ -21,14 +21,6 @@ export default async function ProjectBoardPage({ params }: { params: Promise<{ i
   if (uid) {
     const user = await prisma.user.findUnique({
       where: { id: uid },
-      select: {
-        id: true,
-        stripePriceId: true,
-        stripeCurrentPeriodEnd: true,
-        stripeSubscriptionId: true,
-        stripeCustomerId: true,
-        aiTokensUsed: true,
-      },
     });
 
     if (user) {

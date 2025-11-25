@@ -7,23 +7,21 @@ const MermaidNode = ({ data, id }: { data: { text: string }, id: string }) => {
   const [editText, setEditText] = React.useState(data.text || '');
 
   useEffect(() => {
-    let mermaid: typeof import('mermaid');
-
     // Dynamically import mermaid only on the client to avoid SSR issues
     (async () => {
-      if (!mermaid) {
-        mermaid = (await import('mermaid')).default;
+      try {
+        const mermaidModule = await import('mermaid');
+        const mermaid = mermaidModule.default;
+        
         mermaid.initialize({
           startOnLoad: false,
           theme: 'default',
           securityLevel: 'loose',
         });
-      }
 
-      if (mermaidRef.current && data.text) {
-        try {
-          const id = `mermaid-svg-${Date.now()}`;
+        if (mermaidRef.current && data.text) {
           try {
+            const id = `mermaid-svg-${Date.now()}`;
             // Clean the input text - remove problematic characters
             const cleanText = data.text
               .replace(/\\n/g, '\n')  // Handle escaped newlines
@@ -59,20 +57,17 @@ const MermaidNode = ({ data, id }: { data: { text: string }, id: string }) => {
               `;
             }
           }
-        } catch (error) {
-          console.error('Mermaid rendering error:', error);
-          if (mermaidRef.current) {
-            mermaidRef.current.innerHTML = 'Invalid Mermaid syntax';
-          }
         }
+      } catch (error) {
+        console.error('Mermaid loading error:', error);
       }
     })();
   }, [data.text]);
 
   const handleSave = () => {
     // Update the node data using the global setNodes function
-    if (window.setNodes) {
-      window.setNodes((nodes: any[]) => 
+    if ((window as any).setNodes) {
+      (window as any).setNodes((nodes: any[]) => 
         nodes.map(node => 
           node.id === id 
             ? { ...node, data: { ...node.data, text: editText } }
