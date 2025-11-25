@@ -22,7 +22,7 @@ export const PLANS = [
     price: {
       amount: 5,
       priceIds: {
-        test: 'price_1Qo9i2LwFj6t3K9zX7p8Y0k1', // Placeholder - replace with real ID
+        test: 'price_1SXTxaRxxcmCKpcfLXfY84V1',
         production: '',
       },
     },
@@ -35,7 +35,7 @@ export const PLANS = [
     price: {
       amount: 15,
       priceIds: {
-        test: 'price_1Qo9i2LwFj6t3K9zX7p8Y0k2', // Placeholder - replace with real ID
+        test: 'price_1SXTxzRxxcmCKpcf09cXWyYL',
         production: '',
       },
     },
