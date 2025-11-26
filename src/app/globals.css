@@ -20,7 +20,7 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-.react-flow__node:not(.group) {
+.react-flow__node:not(.group):not(.react-flow__node-drawing):not(.react-flow__node-postit) {
   background-color: white;
   border-radius: 16px;
   box-shadow: inset 0 0 10px 5px rgba(120, 230, 210, 0.5);
@@ -29,7 +29,7 @@ body {
 
 .sticky-title-container {
   position: fixed;
-  top: 8px;
+  top: 12px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -39,27 +39,68 @@ body {
 }
 
 .sticky-title-toggle {
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(0,0,0,0.08);
-  border-radius: 999px;
-  padding: 6px 10px;
+  background: #fff;
+  border: 2px solid #000;
+  border-radius: 0;
+  padding: 10px;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  box-shadow: 2px 2px 0px 0px #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
 }
 
 .sticky-title {
   min-width: 200px;
   max-width: 50vw;
   padding: 8px 14px;
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid rgba(0,0,0,0.08);
-  border-radius: 12px;
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
+  background: #fff;
+  border: 2px solid #000;
+  border-radius: 0;
+  box-shadow: 2px 2px 0px 0px #000;
   text-align: center;
   font-weight: 600;
   outline: none;
   user-select: text;
   transition: all 0.2s ease;
+  height: 42px;
+}
+
+.group-select {
+  padding: 0 14px;
+  background: #fff;
+  border: 2px solid #000;
+  border-radius: 0;
+  box-shadow: 2px 2px 0px 0px #000;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+  height: 42px;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 16px;
+  padding-right: 32px;
+}
+
+.action-button {
+  position: fixed;
+  top: 12px;
+  padding: 10px;
+  background: #fff;
+  color: #000;
+  border: 2px solid #000;
+  cursor: pointer;
+  box-shadow: 2px 2px 0px 0px #000;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 42px;
+  width: 42px;
 }
 
 /* Thinking Node Styles */
@@ -123,25 +164,10 @@ body {
   100% { transform: rotate(360deg); }
 }
 
+
 .sticky-title-container.collapsed .sticky-title {
   padding: 4px 10px;
   max-width: 240px;
   opacity: 0.85;
   pointer-events: none;
-}
-
-.group-select {
-  min-width: 200px;
-  max-width: 50vw;
-  padding: 8px 14px;
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid rgba(0,0,0,0.08);
-  border-radius: 12px;
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
-  text-align: center;
-  text-align-last: center;
-  font-weight: 600;
-  outline: none;
-  user-select: text;
-  transition: all 0.2s ease;
 }

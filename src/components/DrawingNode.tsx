@@ -6,12 +6,24 @@ interface Point {
   y: number;
 }
 
-export function DrawingNode({ data, id, xPos, yPos }: NodeProps<{ lines: Point[][], setNodes: any }>) {
+interface DrawingNodeData {
+  lines: Point[][];
+  setNodes: any;
+  color?: string;
+  strokeWidth?: number;
+  opacity?: number;
+}
+
+export function DrawingNode({ data, id, xPos, yPos }: NodeProps<DrawingNodeData>) {
   const [isHovered, setIsHovered] = useState(false);
 
   if (!data || !data.lines || data.lines.length === 0) {
     return null;
   }
+
+  const color = data.color || 'black';
+  const strokeWidth = data.strokeWidth || 2;
+  const opacity = data.opacity || 1;
 
   const handleDelete = () => {
     data.setNodes((nodes: any) => nodes.filter((n: any) => n.id !== id));
@@ -25,7 +37,7 @@ export function DrawingNode({ data, id, xPos, yPos }: NodeProps<{ lines: Point[]
   const pathData = data.lines
     .map((line) => {
       if (line.length === 0) return '';
-      return `M ${line[0].x - xPos} ${line[0].y - yPos} ${line.slice(1).map((p) => `L ${p.x - xPos} ${p.y - yPos}`).join(' ')}`;
+      return `M ${line[0].x} ${line[0].y} ${line.slice(1).map((p) => `L ${p.x} ${p.y}`).join(' ')}`;
     })
     .join(' ');
 
@@ -64,12 +76,15 @@ export function DrawingNode({ data, id, xPos, yPos }: NodeProps<{ lines: Point[]
           width: '100%',
           height: '100%',
           overflow: 'visible',
+          opacity: opacity,
         }}
       >
         <path
           d={pathData}
-          stroke="black"
-          strokeWidth={2}
+          stroke={color}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeLinejoin="round"
           fill="none"
           style={{ pointerEvents: 'all' }}
         />

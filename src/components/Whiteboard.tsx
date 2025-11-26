@@ -30,6 +30,7 @@ import DefinitionCardNode from './DefinitionCardNode';
 import FormulaNode from './FormulaNode';
 import ComparisonTableNode from './ComparisonTableNode';
 import ProgressTrackerNode from './ProgressTrackerNode';
+import { PostItNode } from './PostItNode';
 import { LimitModal } from './LimitModal';
 import { searchSimilarChunks, batchGenerateEmbeddings } from '../utils/vectorStore';
 const proOptions = { hideAttribution: true };
@@ -43,6 +44,7 @@ const nodeTypes = {
   file: FileNode,
   markdown: MarkdownNode,
   image: ImageNode,
+  postit: PostItNode,
   todo: TodoNode,
   drawing: DrawingNode,
   mermaid: MermaidNode,
@@ -60,7 +62,7 @@ export type WhiteboardHandle = {
   saveNow: () => void;
 };
 
-export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: string; name: string }[]) => void; initialNodes?: Node[]; initialEdges?: Edge[]; projectId?: string; title?: string; userStatus?: any }>(function Whiteboard({ onGroupsChange, initialNodes = defaultInitialNodes, initialEdges = defaultInitialEdges, projectId, title, userStatus }, ref) {
+export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: string; name: string }[]) => void; initialNodes?: Node[]; initialEdges?: Edge[]; projectId?: string; title?: string; userStatus?: any; tool?: 'cursor' | 'markdown' | 'image' | 'postit' | 'highlighter' }>(function Whiteboard({ onGroupsChange, initialNodes = defaultInitialNodes, initialEdges = defaultInitialEdges, projectId, title, userStatus, tool = 'cursor' }, ref) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [showLimitModal, setShowLimitModal] = useState(false);
@@ -69,6 +71,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
   const lastClickTime = React.useRef(0);
   const isDrawing = React.useRef(false);
   const currentDrawing = React.useRef<any>(null);
+  const drawingStartPos = React.useRef({ x: 0, y: 0 });
   const workerRef = React.useRef<Worker | null>(null);
   const saveTimerRef = React.useRef<NodeJS.Timeout | null>(null);
 
@@ -687,13 +690,50 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
 
   const onPaneClick = useCallback(
     (event: any) => {
+      const position = screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+
+      // Handle tools on pane click
+      if (tool !== 'cursor' && tool !== 'highlighter') {
+        const newId = uuidv4();
+        let newNode: Node | null = null;
+
+        if (tool === 'image') {
+          newNode = {
+            id: `node-${newId}`,
+            type: 'image',
+            position,
+            data: { url: '', setNodes },
+            style: { width: 220, height: 260 },
+          };
+        } else if (tool === 'markdown') {
+          newNode = {
+            id: `node-${newId}`,
+            type: 'markdown',
+            position,
+            data: { text: '' },
+            style: { width: 220, height: 180 },
+          };
+        } else if (tool === 'postit') {
+          newNode = {
+            id: `node-${newId}`,
+            type: 'postit',
+            position,
+            data: { text: '' },
+            style: { width: 200, height: 200 },
+          };
+        }
+
+        if (newNode) {
+          setNodes((nodes) => nodes.concat(newNode!));
+          return;
+        }
+      }
+
       const clickTime = new Date().getTime();
       if (clickTime - lastClickTime.current < 300) {
-        const position = screenToFlowPosition({
-          x: event.clientX,
-          y: event.clientY,
-        });
-
         const newId = uuidv4();
 
         const newNode = {
@@ -701,47 +741,74 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
           position,
           data: { label: `group`, onFileDrop: handleFileDrop, setNodes, name: '' },
           type: 'group',
-        className: 'group',
+          className: 'group',
           style: { width: 200, height: 150 },
         };
         setNodes((nodes) => nodes.concat(newNode));
       }
       lastClickTime.current = clickTime;
     },
-    [screenToFlowPosition, setNodes],
+    [screenToFlowPosition, setNodes, tool, handleFileDrop],
   );
 
   const onMouseDown = (event: React.MouseEvent) => {
-    if (event.button !== 2) return;
+    const isRightClick = event.button === 2;
+    const isHighlighter = tool === 'highlighter' && event.button === 0;
+
+    if (!isRightClick && !isHighlighter) return;
+
     isDrawing.current = true;
     const point = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    drawingStartPos.current = point;
 
     const newId = `drawing-${uuidv4()}`;
 
-    const targetGroup = getNodes().find(
-      (node) =>
-        node.type === 'group' &&
-        point.x >= node.position.x &&
-        point.x <= node.position.x + (node.width || 0) &&
-        point.y >= node.position.y &&
-        point.y <= node.position.y + (node.height || 0)
+    // Find the topmost node under the cursor
+    const targetNode = getNodes().reverse().find(
+      (node) => {
+        // Skip drawing nodes to avoid attaching highlight to another highlight
+        if (node.type === 'drawing') return false;
+        
+        // Use absolute position for intersection check
+        const posX = node.positionAbsolute?.x ?? node.position.x;
+        const posY = node.positionAbsolute?.y ?? node.position.y;
+        const width = (node.style?.width as number) || node.width || 0;
+        const height = (node.style?.height as number) || node.height || 0;
+
+        return (
+          point.x >= posX &&
+          point.x <= posX + width &&
+          point.y >= posY &&
+          point.y <= posY + height
+        );
+      }
     );
 
-    const localPosition = targetGroup
-      ? { x: point.x - targetGroup.position.x, y: point.y - targetGroup.position.y }
+    const localPosition = targetNode
+      ? { x: point.x - (targetNode.positionAbsolute?.x ?? targetNode.position.x), y: point.y - (targetNode.positionAbsolute?.y ?? targetNode.position.y) }
       : point;
 
     const newDrawingNode: Node = {
       id: newId,
       type: 'drawing',
       position: localPosition,
-      data: { lines: [[point]], setNodes },
-      parentNode: targetGroup ? targetGroup.id : undefined,
-      extent: targetGroup ? 'parent' : undefined,
+      data: { 
+        lines: [[{ x: 0, y: 0 }]], 
+        setNodes,
+        color: isHighlighter ? '#fff740' : 'black',
+        strokeWidth: isHighlighter ? 20 : 2,
+        opacity: isHighlighter ? 0.4 : 1
+      },
+      parentNode: targetNode ? targetNode.id : undefined,
+      extent: targetNode?.type === 'group' ? 'parent' : undefined,
+      zIndex: isHighlighter ? 1000 : undefined,
     };
 
     currentDrawing.current = newDrawingNode;
     setNodes((nodes) => nodes.concat(newDrawingNode));
+    // For highlighter (left click), we need to prevent default to stop selection/panning
+    // For drawing (right click), we need to prevent default to stop context menu
+    // So always prevent default is correct here
     event.preventDefault();
   };
 
@@ -749,13 +816,17 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
     if (!isDrawing.current || !currentDrawing.current) return;
 
     const point = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    const relativePoint = {
+      x: point.x - drawingStartPos.current.x,
+      y: point.y - drawingStartPos.current.y
+    };
 
     setNodes((nodes) =>
       nodes.map((node) => {
         if (currentDrawing.current && node.id === currentDrawing.current.id) {
           const newLines = [...node.data.lines];
           const lastLine = newLines[newLines.length - 1];
-          newLines[newLines.length - 1] = [...lastLine, point];
+          newLines[newLines.length - 1] = [...lastLine, relativePoint];
           return { ...node, data: { ...node.data, lines: newLines } };
         }
         return node;
@@ -803,6 +874,66 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
       }
     },
     [screenToFlowPosition, setNodes, handleAiNodeSubmit],
+  );
+
+  const onNodeClick = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      if (tool && tool !== 'cursor' && node.type === 'group') {
+        const position = screenToFlowPosition({
+          x: event.clientX,
+          y: event.clientY,
+        });
+
+        const newId = uuidv4();
+        let newNode: Node | null = null;
+        
+        const relativeX = position.x - node.position.x;
+        const relativeY = position.y - node.position.y;
+
+        if (tool === 'markdown') {
+          newNode = {
+            id: `node-${newId}`,
+            type: 'markdown',
+            position: { x: relativeX, y: relativeY },
+            data: {
+              text: '',
+            },
+            parentNode: node.id,
+            extent: 'parent',
+            style: { width: 220, height: 180 },
+          };
+        } else if (tool === 'image') {
+          newNode = {
+            id: `node-${newId}`,
+            type: 'image',
+            position: { x: relativeX, y: relativeY },
+            data: {
+              url: '',
+            },
+            parentNode: node.id,
+            extent: 'parent',
+            style: { width: 220, height: 260 },
+          };
+        } else if (tool === 'postit') {
+          newNode = {
+            id: `node-${newId}`,
+            type: 'postit',
+            position: { x: relativeX, y: relativeY },
+            data: {
+              text: '',
+            },
+            parentNode: node.id,
+            extent: 'parent',
+            style: { width: 200, height: 200 },
+          };
+        }
+
+        if (newNode) {
+          setNodes((nodes) => nodes.concat(newNode!));
+        }
+      }
+    },
+    [tool, screenToFlowPosition, setNodes]
   );
   
   return (
@@ -937,9 +1068,16 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onPaneClick={onPaneClick}
+        onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
         nodeTypes={nodeTypes}
         proOptions={proOptions}
+        panOnDrag={tool !== 'highlighter'}
+        panOnScroll={tool !== 'highlighter'}
+        selectionOnDrag={tool !== 'highlighter'}
+        nodesDraggable={tool !== 'highlighter'}
+        nodesConnectable={tool !== 'highlighter'}
+        elementsSelectable={tool !== 'highlighter'}
       >
         <Controls />
         <MiniMap />

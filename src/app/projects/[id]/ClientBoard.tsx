@@ -4,6 +4,7 @@ import React from 'react';
 import Whiteboard from '@/components/Whiteboard';
 import { ReactFlowProvider, Node, Edge } from 'reactflow';
 import { useRouter } from 'next/navigation';
+import { MousePointer2, Type, Image as ImageIcon, StickyNote, Highlighter, ArrowLeft, Save } from 'lucide-react';
 
 function fixEmbeddings(nodes: any[]): any[] {
   return (Array.isArray(nodes) ? nodes : []).map((n: any) => {
@@ -20,7 +21,7 @@ export default function ClientBoard({ id, initialTitle, initialNodes, initialEdg
   const [collapsed, setCollapsed] = React.useState<boolean>(false);
   const [groups, setGroups] = React.useState<{ id: string; name: string }[]>([]);
   const whiteboardRef = React.useRef<any>(null);
-  const [groupsOpen, setGroupsOpen] = React.useState<boolean>(false);
+  const [tool, setTool] = React.useState<'cursor' | 'markdown' | 'image' | 'postit' | 'highlighter'>('cursor');
   const router = useRouter();
 
   const nodesFixed = React.useMemo(() => fixEmbeddings(initialNodes as any[]), [initialNodes]);
@@ -30,46 +31,27 @@ export default function ClientBoard({ id, initialTitle, initialNodes, initialEdg
       <button
         onClick={() => router.push('/projects')}
         title="Retour aux projets"
-        style={{
-          position: 'fixed',
-          top: 8,
-          left: 12,
-          background: 'rgba(255, 255, 255, 0.85)',
-          border: '1px solid rgba(0,0,0,0.08)',
-          borderRadius: 999,
-          padding: '6px 10px',
-          cursor: 'pointer',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-          zIndex: 1000,
-        }}
+        className="action-button"
+        style={{ left: 12 }}
       >
-        ← Retour
+        <ArrowLeft size={20} />
       </button>
       <div className={`sticky-title-container ${collapsed ? 'collapsed' : ''}`}>
         <button
           className="sticky-title-toggle"
           aria-label={collapsed ? 'Étendre le titre' : 'Rétracter le titre'}
-          onClick={() => {
-            setCollapsed((v) => {
-              const next = !v;
-              setGroupsOpen(!next);
-              return next;
-            });
-          }}
+          onClick={() => setCollapsed((v) => !v)}
         >
           {collapsed ? '▾' : '▴'}
         </button>
-        <div
+        <input
           className="sticky-title"
-          contentEditable={!collapsed}
-          suppressContentEditableWarning
-          suppressHydrationWarning
-          onInput={(e) => setTitle((e.target as HTMLElement).innerText)}
+          readOnly={collapsed}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
           title="Cliquez pour éditer le titre"
-        >
-          {title}
-        </div>
-        {groups.length > 0 && groupsOpen && (
+        />
+        {groups.length > 0 && !collapsed && (
           <select
             className="group-select"
             defaultValue=""
@@ -93,20 +75,10 @@ export default function ClientBoard({ id, initialTitle, initialNodes, initialEdg
       <button
         onClick={() => whiteboardRef.current?.saveNow?.()}
         title="Sauvegarder"
-        style={{
-          position: 'fixed',
-          top: 8,
-          right: 12,
-          background: 'rgba(255, 255, 255, 0.85)',
-          border: '1px solid rgba(0,0,0,0.08)',
-          borderRadius: 999,
-          padding: '6px 10px',
-          cursor: 'pointer',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-          zIndex: 1000,
-        }}
+        className="action-button"
+        style={{ right: 12 }}
       >
-        💾 Sauvegarder
+        <Save size={20} />
       </button>
       <ReactFlowProvider>
         <Whiteboard
@@ -117,8 +89,125 @@ export default function ClientBoard({ id, initialTitle, initialNodes, initialEdg
           projectId={id}
           title={title}
           userStatus={userStatus}
+          tool={tool}
         />
       </ReactFlowProvider>
+      {tool !== 'cursor' && (
+        <style>{`
+          .react-flow__pane, .react-flow__node {
+            cursor: crosshair !important;
+          }
+        `}</style>
+      )}
+      <div style={{
+        position: 'fixed',
+        bottom: 24,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        background: 'white',
+        padding: '12px 20px',
+        boxShadow: '4px 4px 0px 0px #000',
+        display: 'flex',
+        gap: 12,
+        zIndex: 1000,
+        border: '3px solid #000',
+      }}>
+        <button
+          onClick={() => setTool('cursor')}
+          title="Curseur"
+          style={{
+            padding: '10px',
+            background: tool === 'cursor' ? '#000' : '#fff',
+            color: tool === 'cursor' ? '#fff' : '#000',
+            border: '2px solid #000',
+            cursor: 'pointer',
+            transition: 'all 0.1s',
+            transform: tool === 'cursor' ? 'translate(2px, 2px)' : 'none',
+            boxShadow: tool === 'cursor' ? 'none' : '2px 2px 0px 0px #000',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <MousePointer2 size={20} />
+        </button>
+        <button
+          onClick={() => setTool('markdown')}
+          title="Texte / Markdown"
+          style={{
+            padding: '10px',
+            background: tool === 'markdown' ? '#000' : '#fff',
+            color: tool === 'markdown' ? '#fff' : '#000',
+            border: '2px solid #000',
+            cursor: 'pointer',
+            transition: 'all 0.1s',
+            transform: tool === 'markdown' ? 'translate(2px, 2px)' : 'none',
+            boxShadow: tool === 'markdown' ? 'none' : '2px 2px 0px 0px #000',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Type size={20} />
+        </button>
+        <button
+          onClick={() => setTool('image')}
+          title="Image"
+          style={{
+            padding: '10px',
+            background: tool === 'image' ? '#000' : '#fff',
+            color: tool === 'image' ? '#fff' : '#000',
+            border: '2px solid #000',
+            cursor: 'pointer',
+            transition: 'all 0.1s',
+            transform: tool === 'image' ? 'translate(2px, 2px)' : 'none',
+            boxShadow: tool === 'image' ? 'none' : '2px 2px 0px 0px #000',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <ImageIcon size={20} />
+        </button>
+        <button
+          onClick={() => setTool('postit')}
+          title="Post-it"
+          style={{
+            padding: '10px',
+            background: tool === 'postit' ? '#000' : '#fff',
+            color: tool === 'postit' ? '#fff' : '#000',
+            border: '2px solid #000',
+            cursor: 'pointer',
+            transition: 'all 0.1s',
+            transform: tool === 'postit' ? 'translate(2px, 2px)' : 'none',
+            boxShadow: tool === 'postit' ? 'none' : '2px 2px 0px 0px #000',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <StickyNote size={20} />
+        </button>
+        <button
+          onClick={() => setTool('highlighter')}
+          title="Surligneur"
+          style={{
+            padding: '10px',
+            background: tool === 'highlighter' ? '#000' : '#fff',
+            color: tool === 'highlighter' ? '#fff' : '#000',
+            border: '2px solid #000',
+            cursor: 'pointer',
+            transition: 'all 0.1s',
+            transform: tool === 'highlighter' ? 'translate(2px, 2px)' : 'none',
+            boxShadow: tool === 'highlighter' ? 'none' : '2px 2px 0px 0px #000',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Highlighter size={20} />
+        </button>
+      </div>
     </main>
   );
 }
