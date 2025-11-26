@@ -66,9 +66,17 @@ export async function DELETE(req: Request) {
       return new NextResponse('No active subscription found', { status: 404 });
     }
 
-    // Cancel at period end
-    const canceledSubscription = await stripe.subscriptions.update(user.stripeSubscriptionId, {
-      cancel_at_period_end: true,
+    // Cancel immediately to allow full downgrade
+    const canceledSubscription = await stripe.subscriptions.cancel(user.stripeSubscriptionId);
+
+    // Update user record to remove subscription details immediately
+    await prisma.user.update({
+      where: { id: uid },
+      data: {
+        stripeSubscriptionId: null,
+        stripePriceId: 'free',
+        stripeCurrentPeriodEnd: null,
+      }
     });
 
     return NextResponse.json({ subscription: canceledSubscription });

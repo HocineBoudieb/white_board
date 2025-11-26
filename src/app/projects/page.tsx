@@ -78,7 +78,18 @@ export default function ProjectsPage() {
       return;
     }
     setUid(cookieUid);
-    load();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('success') === 'true') {
+      // Sync subscription status from Stripe
+      fetch('/api/stripe/sync', { method: 'POST' })
+        .finally(() => {
+          window.history.replaceState({}, '', '/projects');
+          load();
+        });
+    } else {
+      load();
+    }
   }, [load, router]);
 
   const create = async () => {

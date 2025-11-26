@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { PLANS } from '@/utils/subscription';
-import { Check, Loader2, ArrowLeft } from 'lucide-react';
+import { Check, Loader2, ArrowLeft, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface UserStatus {
@@ -18,6 +18,12 @@ interface UserStatus {
 export default function PricingPage() {
   const [loading, setLoading] = useState<string | null>(null);
   const [userStatus, setUserStatus] = useState<UserStatus | null>(null);
+  const [confirmationData, setConfirmationData] = useState<{
+    priceId: string;
+    amountDue: number;
+    currency: string;
+    newPlanName: string;
+  } | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -41,18 +47,26 @@ export default function PricingPage() {
     try {
       // Check if updating existing subscription
       if (userStatus?.hasSelectedPlan && userStatus.plan.slug !== 'free') {
-        const res = await fetch('/api/stripe/subscription', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ priceId }),
+        // Preview the update first
+        const previewRes = await fetch('/api/stripe/subscription/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ priceId }),
         });
-        
-        if (res.ok) {
-          // Refresh status and UI
-          const updated = await fetch('/api/user/status').then(r => r.json());
-          setUserStatus(updated);
+
+        if (previewRes.ok) {
+            const previewData = await previewRes.json();
+            const plan = PLANS.find(p => p.price.priceIds.test === priceId || p.price.priceIds.production === priceId);
+            setConfirmationData({
+                priceId,
+                amountDue: previewData.amountDue,
+                currency: previewData.currency,
+                newPlanName: plan?.name || 'Unknown Plan',
+            });
         } else {
-           console.error('Update failed');
+            console.error('Failed to preview subscription update');
+            // Fallback or error message?
+            // Maybe direct update attempt if preview fails? No, safer to stop.
         }
       } else {
         // New subscription
@@ -79,42 +93,132 @@ export default function PricingPage() {
     }
   };
 
-  const handleSelectFree = async () => {
-    setLoading('free');
+  const handleConfirmUpdate = async () => {
+    if (!confirmationData) return;
+    setLoading('confirm');
     try {
-      if (userStatus?.hasSelectedPlan && userStatus.plan.slug !== 'free') {
-        // Cancel subscription
-        const res = await fetch('/api/stripe/subscription', {
-          method: 'DELETE',
-        });
-        if (res.ok) {
-           // Refresh status
-           const updated = await fetch('/api/user/status').then(r => r.json());
-           setUserStatus(updated);
-           // Maybe show a message?
+        if (confirmationData.newPlanName === 'Gratuit') {
+             // Handle downgrade to free
+             const res = await fetch('/api/stripe/subscription', {
+                method: 'DELETE',
+             });
+             if (res.ok) {
+                const updated = await fetch('/api/user/status').then(r => r.json());
+                setUserStatus(updated);
+                setConfirmationData(null);
+             } else {
+                 console.error('Cancellation failed');
+             }
+        } else {
+            // Handle update to paid plan
+            const res = await fetch('/api/stripe/subscription', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ priceId: confirmationData.priceId }),
+            });
+            
+            if (res.ok) {
+              // Refresh status and UI
+              const updated = await fetch('/api/user/status').then(r => r.json());
+              setUserStatus(updated);
+              setConfirmationData(null);
+            } else {
+               console.error('Update failed');
+            }
         }
-      } else {
-        // Just selecting free plan initially (if logic requires it)
-        const res = await fetch('/api/plans/select', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ planSlug: 'free' }),
-        });
-        if (res.ok) {
-            router.push('/projects');
-        }
-      }
     } catch (error) {
-      console.error('Error selecting free plan:', error);
+        console.error('Error confirming update:', error);
     } finally {
-      setLoading(null);
+        setLoading(null);
+    }
+  };
+
+  const handleSelectFree = async () => {
+    if (userStatus?.hasSelectedPlan && userStatus.plan.slug !== 'free') {
+        // Show confirmation for downgrade
+        setConfirmationData({
+            priceId: '',
+            amountDue: 0,
+            currency: 'EUR',
+            newPlanName: 'Gratuit',
+        });
+    } else {
+        // Initial selection logic (if needed)
+        setLoading('free');
+        try {
+            const res = await fetch('/api/plans/select', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ planSlug: 'free' }),
+            });
+            if (res.ok) {
+                router.push('/projects');
+            }
+        } catch (error) {
+            console.error('Error selecting free plan:', error);
+        } finally {
+            setLoading(null);
+        }
     }
   };
 
 
 
   return (
-    <div className="min-h-screen w-full bg-white font-sans text-black overflow-x-hidden">
+    <div className="min-h-screen w-full bg-white font-sans text-black overflow-x-hidden relative">
+       {confirmationData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-white border-4 border-black p-8 max-w-md w-full shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] relative">
+                <button 
+                    onClick={() => setConfirmationData(null)}
+                    className="absolute top-4 right-4 hover:bg-gray-100 p-1"
+                >
+                    <X size={24} />
+                </button>
+                <h2 className="text-3xl font-black mb-6 uppercase tracking-tight">Confirmer le changement</h2>
+                
+                <div className="space-y-4 mb-8">
+                    <p className="text-lg font-medium">
+                        Vous passez au plan <span className="font-black">{confirmationData.newPlanName}</span>.
+                    </p>
+                    
+                    {confirmationData.newPlanName === 'Gratuit' ? (
+                         <div className="bg-red-50 p-4 border-2 border-red-500 text-red-700">
+                             <p className="font-bold uppercase mb-1">Attention</p>
+                             <p>Votre abonnement actuel sera résilié immédiatement. Vous perdrez accès aux fonctionnalités payantes.</p>
+                         </div>
+                    ) : (
+                        <div className="bg-gray-50 p-4 border-2 border-black">
+                            <p className="text-sm text-gray-500 font-bold uppercase mb-1">Montant à régler maintenant</p>
+                            <p className="text-4xl font-black">
+                                {(confirmationData.amountDue / 100).toFixed(2)} {confirmationData.currency.toUpperCase()}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-2">
+                                Calculé au prorata de votre période actuelle.
+                            </p>
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex gap-4">
+                    <button
+                        onClick={() => setConfirmationData(null)}
+                        className="flex-1 py-3 border-4 border-black font-bold uppercase hover:bg-gray-100 transition-colors"
+                    >
+                        Annuler
+                    </button>
+                    <button
+                        onClick={handleConfirmUpdate}
+                        disabled={loading === 'confirm'}
+                        className="flex-1 py-3 border-4 border-black bg-primary font-bold uppercase hover:brightness-110 transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[-2px] hover:translate-y-[-2px] disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {loading === 'confirm' ? <Loader2 className="animate-spin mx-auto" /> : 'Confirmer'}
+                    </button>
+                </div>
+            </div>
+        </div>
+       )}
+
        <nav className="sticky top-0 z-40 bg-white border-b-4 border-black px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2 cursor-pointer" onClick={() => router.push('/projects')}>
           <span className="text-2xl font-black tracking-tighter">FRAYM.</span>
@@ -189,12 +293,12 @@ export default function PricingPage() {
 
                   <button
                 onClick={() => {
-                  if (userStatus?.plan.slug === plan.slug) return;
+                  if (userStatus?.plan.slug === plan.slug && userStatus?.hasSelectedPlan) return;
                   plan.slug === 'free' ? handleSelectFree() : handleSubscribe(plan.price.priceIds.test);
                 }}
-                disabled={loading !== null || userStatus?.plan.slug === plan.slug}
+                disabled={loading !== null || (userStatus?.plan.slug === plan.slug && userStatus?.hasSelectedPlan)}
                 className={`w-full py-4 border-4 border-black font-black text-lg uppercase tracking-widest transition-all ${
-                  userStatus?.plan.slug === plan.slug
+                  userStatus?.plan.slug === plan.slug && userStatus?.hasSelectedPlan
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed border-gray-400 shadow-none'
                     : plan.slug === 'pro'
                     ? 'bg-black text-white hover:bg-primary hover:text-black hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]'
@@ -203,7 +307,7 @@ export default function PricingPage() {
               >
                 {loading === plan.price.priceIds.test || (plan.slug === 'free' && loading === 'free') ? (
                   <Loader2 className="w-6 h-6 animate-spin mx-auto" />
-                ) : userStatus?.plan.slug === plan.slug ? (
+                ) : userStatus?.plan.slug === plan.slug && userStatus?.hasSelectedPlan ? (
                   'Plan Actuel'
                 ) : plan.slug === 'free' ? (
                   'Choisir'
