@@ -314,24 +314,14 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
       const originNode = getNode(originNodeId);
       if (!originNode) return;
 
-      // Créer un node de chargement temporaire
-      const loadingId = `loading-${uuidv4()}`;
-
-      const loadingNode: Node = {
-        id: loadingId,
-        type: 'markdown',
-        position: {
-          x: originNode.position.x + (originNode.width || 0) + 20,
-          y: originNode.position.y,
-        },
-        data: {
-          text: '🤔 AI is thinking...',
-        },
-        parentNode: originNode.parentNode,
-        extent: originNode.extent,
-      };
-
-      setNodes((nodes) => nodes.concat(loadingNode));
+      // Update source node to loading state
+      setNodes((nodes) =>
+        nodes.map((node) =>
+          node.id === originNodeId
+            ? { ...node, className: 'thinking-node', data: { ...node.data, isLoading: true } }
+            : node
+        )
+      );
 
       const content = `${context ? `${context}\n\n` : ''}${text}\n\nIMPORTANT: Respond ONLY with a valid JSON array of nodes. Do not include any other text, explanation, or markdown formatting.\n\nEach node should have this structure:\n{\n  "type": "markdown" | "todo" | "image" | "drawing" | "mermaid" | "flashcard" | "quiz" | "timeline" | "definition" | "formula" | "comparison" | "progress",\n  "data": { ... }\n}\n\nAvailable node types:\n- markdown: { "text": "markdown content" }\n- todo: { "items": [{ "text": "item text", "completed": false }] }\n- image: { "url": "image url" }\n- drawing: { "lines": [[{"x": 0, "y": 0}, {"x": 10, "y": 10}]] }\n- mermaid: { "text": "mermaid diagram syntax" }\n- flashcard: { "front": "recto", "back": "verso" }\n- quiz: { "question": "Q?", "choices": [{ "id": "1", "text": "A", "correct": true }, { "id": "2", "text": "B", "correct": false }], "explanation": "optional" }\n- timeline: { "events": [{ "id": "1", "date": "2024-01-01", "title": "Event", "description": "optional" }] }\n- definition: { "term": "Mot", "definition": "Définition", "example": "optional", "tags": ["tag1"] }\n- formula: { "latex": "a + b", "variables": { "a": 1, "b": 2 } }\n- comparison: { "headers": ["A", "B"], "rows": [{ "id": "1", "label": "Critère", "col1": "val A", "col2": "val B" }] }\n- progress: { "current": 75, "milestones": [{ "id": "1", "label": "Done", "completed": true }], "stats": [{ "label": "Heures", "value": "12h" }] }\n\nExample response:\n[\n  {\n    "type": "markdown",\n    "data": {\n      "text": "# Hello\\nThis is markdown"\n    }\n  },\n  {\n    "type": "todo",\n    "data": {\n      "items": [\n        { "text": "Task 1", "completed": false },\n        { "text": "Task 2", "completed": true }\n      ]\n    }\n  }\n]\n\nRespond with ONLY the JSON array, nothing else.`;
 
@@ -363,8 +353,8 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
           setShowLimitModal(true);
           setNodes((nodes) =>
             nodes.map((node) =>
-              node.id === loadingId
-                ? { ...node, data: { ...node.data, text: '🔒 Abonnement requis. Mettez à niveau pour utiliser l\'IA.' } }
+              node.id === originNodeId
+                ? { ...node, className: '', data: { ...node.data, isLoading: false } }
                 : node
             )
           );
@@ -399,12 +389,12 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
                   fullText += evt.delta;
                 } else if (evt.type === 'error' && evt.error) {
                   setNodes((nodes) =>
-                    nodes.map((node) =>
-                      node.id === loadingId
-                        ? { ...node, data: { ...node.data, text: `Error: ${evt.error}` } }
-                        : node
-                    )
-                  );
+            nodes.map((node) =>
+              node.id === originNodeId
+                ? { ...node, className: '', data: { ...node.data, isLoading: false, text: `Error: ${evt.error}` } }
+                : node
+            )
+          );
                   return;
                 }
               } catch (e) {
@@ -439,7 +429,14 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
           }
 
           // Supprimer le node de chargement
-          setNodes((nodes) => nodes.filter((n) => n.id !== loadingId));
+          // Reset source node loading state
+          setNodes((nodes) =>
+            nodes.map((node) =>
+              node.id === originNodeId
+                ? { ...node, className: '', data: { ...node.data, isLoading: false } }
+                : node
+            )
+          );
 
           const newNodes: Node[] = [];
           const parent = originNode.parentNode ? getNode(originNode.parentNode) : null;
@@ -671,12 +668,20 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
         } catch (e: any) {
           setNodes((nodes) =>
             nodes.map((n) =>
-              n.id === loadingId
-                ? { ...n, data: { ...n.data, text: `Error: ${e?.message || 'Invalid response'}` } }
+              n.id === originNodeId
+                ? { ...n, className: '', data: { ...n.data, isLoading: false, text: `Error: ${e?.message || 'Invalid response'}` } }
                 : n
             )
           );
         }
+      }).catch((e) => {
+        setNodes((nodes) =>
+          nodes.map((n) =>
+            n.id === originNodeId
+              ? { ...n, className: '', data: { ...n.data, isLoading: false, text: `Error: ${e?.message || 'Network error'}` } }
+              : n
+          )
+        );
       });
     }, [getNode, setNodes]);
 

@@ -6,6 +6,7 @@ import { generateEmbedding, searchSimilarChunks } from '../utils/vector_store';
 export type AiNodeData = {
   label: string;
   text: string;
+  isLoading?: boolean;
   onSubmit: (text: string, context?: string) => void;
 };
 
@@ -77,11 +78,17 @@ export default function AiNode({ id, data, selected }: NodeProps<AiNodeData>) {
     <>
       <NodeResizer isVisible={selected} minWidth={100} minHeight={30} />
       <Handle type="target" position={Position.Left} />
-      <div style={{ padding: 10 }}>
+      <div style={{ padding: 10 }} className={data.isLoading ? 'thinking-node' : ''}>
+        {data.isLoading && (
+          <div className="thinking-overlay">
+            <div className="thinking-spinner" />
+          </div>
+        )}
         <textarea
           defaultValue={data.text}
           onChange={onChange}
           onKeyDown={onKeyDown}
+          disabled={data.isLoading}
           style={{ width: '100%', border: 'none', background: 'transparent', resize: 'none' }}
         />
       </div>
