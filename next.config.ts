@@ -34,6 +34,7 @@ const nextConfig: NextConfig = {
     config.output.webassemblyModuleFilename = (isServer ? '../' : '') + 'static/wasm/[modulehash].wasm';
     return config;
   },
+  turbopack: {},
 };
 
 export default nextConfig;
