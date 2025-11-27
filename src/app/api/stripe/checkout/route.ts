@@ -34,6 +34,12 @@ export async function POST(req: Request) {
 
     let customerId = user.stripeCustomerId;
 
+    const settingsUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (!settingsUrl) {
+      console.error('[STRIPE_CHECKOUT] NEXT_PUBLIC_APP_URL is not defined');
+      return new NextResponse('Configuration Error', { status: 500 });
+    }
+
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: user.email,
@@ -58,8 +64,8 @@ export async function POST(req: Request) {
         },
       ],
       mode: 'subscription',
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/projects?success=true`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/pricing?canceled=true`,
+      success_url: `${settingsUrl}/projects?success=true`,
+      cancel_url: `${settingsUrl}/pricing?canceled=true`,
       metadata: {
         userId: user.id,
       },
