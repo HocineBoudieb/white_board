@@ -1,4 +1,5 @@
 import { NodeResizer } from '@reactflow/node-resizer';
+import { useEffect, useRef } from 'react';
 import { Node, NodeProps, useReactFlow } from 'reactflow';
 import { Handle, Position } from 'reactflow';
 import { generateEmbedding, searchSimilarChunks } from '../utils/vector_store';
@@ -14,6 +15,24 @@ export type AiNode = Node<AiNodeData>;
 
 export default function AiNode({ id, data, selected }: NodeProps<AiNodeData>) {
   const { setNodes, getNodes } = useReactFlow();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+    
+    if (measureRef.current && data.text) {
+      const newWidth = Math.min(Math.max(measureRef.current.offsetWidth + 40, 200), 600);
+      setNodes((nodes) => 
+        nodes.map((n) => 
+          n.id === id ? { ...n, style: { ...n.style, width: newWidth } } : n
+        )
+      );
+    }
+  }, [data.text, id, setNodes]);
 
   const onKeyDown = async (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -67,7 +86,13 @@ export default function AiNode({ id, data, selected }: NodeProps<AiNodeData>) {
     setNodes((nodes) =>
       nodes.map((node) => {
         if (node.id === id) {
-          node.data.text = event.target.value;
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              text: event.target.value,
+            },
+          };
         }
         return node;
       })
@@ -85,12 +110,50 @@ export default function AiNode({ id, data, selected }: NodeProps<AiNodeData>) {
           </div>
         )}
         <textarea
-          defaultValue={data.text}
+          ref={textareaRef}
+          value={data.text}
           onChange={onChange}
           onKeyDown={onKeyDown}
           disabled={data.isLoading}
-          style={{ width: '100%', border: 'none', background: 'transparent', resize: 'none' }}
+          maxLength={2000}
+          style={{
+            width: '100%',
+            border: 'none',
+            background: 'transparent',
+            resize: 'none',
+            overflow: 'hidden',
+            minHeight: '24px',
+            fontFamily: 'inherit',
+          }}
         />
+        <div
+          style={{
+            textAlign: 'right',
+            fontSize: '10px',
+            color: (data.text?.length || 0) > 1800 ? 'red' : '#aaa',
+            marginTop: '4px',
+            fontFamily: 'var(--font-mono)',
+          }}
+        >
+          {data.text?.length || 0}/2000
+        </div>
+        
+        {/* Hidden measurement div */}
+        <div
+          ref={measureRef}
+          style={{
+            position: 'absolute',
+            visibility: 'hidden',
+            height: 'auto',
+            width: 'auto',
+            whiteSpace: 'pre-wrap',
+            fontFamily: 'inherit',
+            fontSize: 'inherit',
+            padding: 0,
+          }}
+        >
+          {data.text}
+        </div>
       </div>
       <Handle type="source" position={Position.Right} />
     </>
