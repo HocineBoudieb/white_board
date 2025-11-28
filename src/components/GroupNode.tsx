@@ -49,8 +49,8 @@ const GroupNode = ({ id, data }: GroupNodeProps) => {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         style={{
-          border: `2px dashed ${isDragOver ? '#3182ce' : '#000'}`,
-          borderRadius: '5px',
+          border: `3px dashed ${isDragOver ? '#3182ce' : '#000'}`,
+          borderRadius: '0px',
           width: '100%',
           height: '100%',
           backgroundColor: isDragOver
@@ -78,15 +78,19 @@ const GroupNode = ({ id, data }: GroupNodeProps) => {
           style={{
             position: 'absolute',
             top: -56,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            padding: '4px 10px',
-            borderRadius: 999,
-            background: 'transparent',
-            fontSize: 12,
-            maxWidth: '70%',
-            textAlign: 'center',
+            left: '0',
+            padding: '8px 16px',
+            borderRadius: 0,
+            background: '#fff',
+            fontSize: 24,
+            fontWeight: 900,
+            maxWidth: '100%',
+            textAlign: 'left',
             outline: 'none',
+            border: '3px solid #000',
+            boxShadow: '4px 4px 0px 0px #000',
+            textTransform: 'uppercase',
+            fontFamily: 'var(--font-mono)',
           }}
         />
         {isDragOver && (

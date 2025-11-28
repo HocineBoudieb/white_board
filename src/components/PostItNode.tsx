@@ -23,16 +23,18 @@ export function PostItNode({ id, data, selected }: NodeProps) {
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
       <div 
         style={{ 
-          width: '100%', 
-          height: '100%', 
-          backgroundColor: '#fff740',
-          boxShadow: '2px 2px 5px rgba(0,0,0,0.2)',
-          padding: 10,
-          display: 'flex',
-          flexDirection: 'column',
-          transform: 'rotate(-1deg)',
-          cursor: isEditing ? 'default' : 'move',
-        }}
+            width: '100%', 
+            height: '100%', 
+            backgroundColor: '#fff740',
+            border: '3px solid #000',
+            boxShadow: '6px 6px 0px 0px #000',
+            padding: 10,
+            display: 'flex',
+            flexDirection: 'column',
+            transform: 'none',
+            cursor: isEditing ? 'default' : 'move',
+            fontFamily: 'var(--font-mono)',
+          }}
         onDoubleClick={() => setIsEditing(true)}
       >
         {isEditing ? (
@@ -48,7 +50,7 @@ export function PostItNode({ id, data, selected }: NodeProps) {
               border: 'none', 
               background: 'transparent', 
               resize: 'none', 
-              fontFamily: '"Comic Sans MS", "Chalkboard SE", sans-serif',
+              fontFamily: 'var(--font-mono)',
               fontSize: '16px',
               outline: 'none',
               color: '#333'
@@ -61,7 +63,7 @@ export function PostItNode({ id, data, selected }: NodeProps) {
             style={{ 
               width: '100%', 
               height: '100%', 
-              fontFamily: '"Comic Sans MS", "Chalkboard SE", sans-serif',
+              fontFamily: 'var(--font-mono)',
               fontSize: '16px',
               color: '#333',
               whiteSpace: 'pre-wrap',
