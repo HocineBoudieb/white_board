@@ -62,7 +62,7 @@ export type WhiteboardHandle = {
   saveNow: () => void;
 };
 
-export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: string; name: string }[]) => void; initialNodes?: Node[]; initialEdges?: Edge[]; projectId?: string; title?: string; userStatus?: any; tool?: 'cursor' | 'markdown' | 'image' | 'postit' | 'highlighter' | 'eraser' }>(function Whiteboard({ onGroupsChange, initialNodes = defaultInitialNodes, initialEdges = defaultInitialEdges, projectId, title, userStatus, tool = 'cursor' }, ref) {
+export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: string; name: string }[]) => void; initialNodes?: Node[]; initialEdges?: Edge[]; projectId?: string; title?: string; userStatus?: any; tool?: 'cursor' | 'markdown' | 'image' | 'postit' | 'highlighter' | 'eraser' | 'pen' }>(function Whiteboard({ onGroupsChange, initialNodes = defaultInitialNodes, initialEdges = defaultInitialEdges, projectId, title, userStatus, tool = 'cursor' }, ref) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [showLimitModal, setShowLimitModal] = useState(false);
@@ -696,7 +696,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
       });
 
       // Handle tools on pane click
-      if (tool !== 'cursor' && tool !== 'highlighter' && tool !== 'eraser') {
+      if (tool !== 'cursor' && tool !== 'highlighter' && tool !== 'eraser' && tool !== 'pen') {
         const newId = uuidv4();
         let newNode: Node | null = null;
 
@@ -752,10 +752,10 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
   );
 
   const onMouseDown = (event: React.MouseEvent) => {
-    const isRightClick = event.button === 2;
     const isHighlighter = tool === 'highlighter' && event.button === 0;
+    const isPen = tool === 'pen' && event.button === 0;
 
-    if (!isRightClick && !isHighlighter) return;
+    if (!isHighlighter && !isPen) return;
 
     isDrawing.current = true;
     const point = screenToFlowPosition({ x: event.clientX, y: event.clientY });
@@ -810,24 +810,58 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
 
     currentDrawing.current = newDrawingNode;
     setNodes((nodes) => nodes.concat(newDrawingNode));
-    // For highlighter (left click), we need to prevent default to stop selection/panning
-    // For drawing (right click), we need to prevent default to stop context menu
-    // So always prevent default is correct here
+    // For highlighter and pen (left click), we need to prevent default to stop selection/panning
     event.preventDefault();
   };
 
   const onMouseMove = (event: React.MouseEvent) => {
     // Handle eraser drag
     if (tool === 'eraser' && event.buttons === 1) {
-      const target = document.elementFromPoint(event.clientX, event.clientY);
-      if (target) {
-        const drawingNode = target.closest('.drawing-node-container');
-        if (drawingNode) {
-          const nodeId = drawingNode.getAttribute('data-id');
-          if (nodeId) {
-            setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+      const eraserPos = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      const eraserRadius = 15; // Tolerance in pixels
+      
+      const nodes = getNodes();
+      const nodesToDelete = nodes.filter((n) => {
+        if (n.type !== 'drawing' || !n.data?.lines) return false;
+        
+        // Calculate node absolute position
+        const xOffset = n.positionAbsolute?.x ?? n.position.x;
+        const yOffset = n.positionAbsolute?.y ?? n.position.y;
+        
+        // Check if any line segment is close to the eraser
+        for (const line of n.data.lines) {
+          if (!line || line.length < 2) continue;
+          
+          for (let i = 0; i < line.length - 1; i++) {
+            const p1 = { x: line[i].x + xOffset, y: line[i].y + yOffset };
+            const p2 = { x: line[i+1].x + xOffset, y: line[i+1].y + yOffset };
+            
+            // Distance from point to line segment
+            const l2 = Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2);
+            if (l2 === 0) {
+              if (Math.sqrt(Math.pow(eraserPos.x - p1.x, 2) + Math.pow(eraserPos.y - p1.y, 2)) < eraserRadius) return true;
+              continue;
+            }
+            
+            let t = ((eraserPos.x - p1.x) * (p2.x - p1.x) + (eraserPos.y - p1.y) * (p2.y - p1.y)) / l2;
+            t = Math.max(0, Math.min(1, t));
+            
+            const proj = {
+              x: p1.x + t * (p2.x - p1.x),
+              y: p1.y + t * (p2.y - p1.y)
+            };
+            
+            if (Math.sqrt(Math.pow(eraserPos.x - proj.x, 2) + Math.pow(eraserPos.y - proj.y, 2)) < eraserRadius) {
+              return true;
+            }
           }
         }
+        return false;
+      });
+
+      if (nodesToDelete.length > 0) {
+        const idsToDelete = new Set(nodesToDelete.map((n) => n.id));
+        setNodes((nds) => nds.filter((n) => !idsToDelete.has(n.id)));
       }
       return;
     }
@@ -898,8 +932,9 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
   const onNodeClick = useCallback(
     (event: React.MouseEvent, node: Node) => {
       if (tool === 'eraser') {
-        if (node.type === 'drawing') {
-          setNodes((nds) => nds.filter((n) => n.id !== node.id));
+        // Logic handled in onMouseMove for drawings
+        if (node.type !== 'drawing') {
+           // ... other eraser logic if needed
         }
         return;
       }
@@ -997,11 +1032,6 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
 
         .react-flow__node.drawing-node {
           pointer-events: none;
-        }
-
-        .react-flow__node.drawing-node path {
-          pointer-events: stroke;
-          cursor: crosshair;
         }
 
         .react-flow__node:not(.drawing-node):hover {
@@ -1107,12 +1137,12 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
         onNodeDoubleClick={onNodeDoubleClick}
         nodeTypes={nodeTypes}
         proOptions={proOptions}
-        panOnDrag={tool !== 'highlighter' && tool !== 'eraser'}
-        panOnScroll={tool !== 'highlighter' && tool !== 'eraser'}
-        selectionOnDrag={tool !== 'highlighter' && tool !== 'eraser'}
-        nodesDraggable={tool !== 'highlighter' && tool !== 'eraser'}
-        nodesConnectable={tool !== 'highlighter' && tool !== 'eraser'}
-        elementsSelectable={tool !== 'highlighter'}
+        panOnDrag={tool !== 'highlighter' && tool !== 'eraser' && tool !== 'pen'}
+        panOnScroll={tool !== 'highlighter' && tool !== 'eraser' && tool !== 'pen'}
+        selectionOnDrag={tool !== 'highlighter' && tool !== 'eraser' && tool !== 'pen'}
+        nodesDraggable={tool !== 'highlighter' && tool !== 'eraser' && tool !== 'pen'}
+        nodesConnectable={tool !== 'highlighter' && tool !== 'eraser' && tool !== 'pen'}
+        elementsSelectable={tool !== 'highlighter' && tool !== 'pen'}
       >
         <Controls />
         <MiniMap />

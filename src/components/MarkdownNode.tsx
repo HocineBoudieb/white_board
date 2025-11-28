@@ -41,14 +41,28 @@ export function MarkdownNode({ id, data }: NodeProps) {
     <>
       <NodeResizer minWidth={100} minHeight={30} />
       <Handle type="target" position={Position.Left} />
-      <div style={{ padding: 10 }} onDoubleClick={handleDoubleClick} onBlur={handleBlur} className={styles['markdown-content']}>
+      <div 
+        style={{ padding: 10, width: '100%', height: '100%' }} 
+        onDoubleClick={handleDoubleClick} 
+        className={styles['markdown-content']}
+      >
         {isEditing ? (
-          <SimpleMdeEditor
-            value={text}
-            onChange={onTextChange}
-          />
+          <div onMouseDown={(e) => e.stopPropagation()} onBlur={handleBlur}>
+            <SimpleMdeEditor
+              value={text}
+              onChange={onTextChange}
+              options={{
+                autofocus: true,
+                spellChecker: false,
+                status: false,
+                toolbar: false,
+              }}
+            />
+          </div>
         ) : (
-          <ReactMarkdown>{text}</ReactMarkdown>
+          <div style={{ width: '100%', height: '100%', cursor: 'move' }}>
+            <ReactMarkdown>{text || '*Double-click to edit*'}</ReactMarkdown>
+          </div>
         )}
       </div>
       <Handle type="source" position={Position.Right} />

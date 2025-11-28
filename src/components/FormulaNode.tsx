@@ -38,8 +38,6 @@ const FormulaNode = ({ data }: { data: FormulaData }) => {
     <div
       style={{
         padding: 16,
-        border: '1px solid #ccc',
-        borderRadius: 8,
         background: '#fff',
         width: '100%',
         height: '100%',

@@ -63,7 +63,6 @@ export function DrawingNode({ data, id, xPos, yPos }: NodeProps<DrawingNodeData>
           strokeLinecap="round"
           strokeLinejoin="round"
           fill="none"
-          style={{ pointerEvents: 'auto', cursor: 'crosshair' }}
         />
         {/* Visible path */}
         <path

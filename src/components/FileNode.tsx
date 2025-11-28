@@ -60,11 +60,10 @@ const FileNode = ({ data }: { data: FileNodeData }) => {
       <div
         style={{
           padding: 16,
-          border: '2px solid ' + getStatusColor(),
-          borderRadius: 8,
-          background: '#fff',
-          width: '100%',
-          height: '100%',
+        borderLeft: '6px solid ' + getStatusColor(),
+        background: '#fff',
+        width: '100%',
+        height: '100%',
           display: 'flex',
           flexDirection: 'column',
           gap: 12,

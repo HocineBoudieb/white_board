@@ -25,7 +25,7 @@ export const ImageNode = memo(({ id, data }: NodeProps) => {
   };
 
   return (
-    <div style={{ width: '100%', height: '100%', background: '#fff', borderRadius: '8px', overflow: 'hidden' }}>
+    <div style={{ width: '100%', height: '100%', background: '#fff', overflow: 'hidden' }}>
       <NodeResizer minWidth={100} minHeight={100} />
       <Handle type="target" position={Position.Left} />
       

@@ -87,8 +87,6 @@ const MermaidNode = ({ data, id }: { data: { text: string }, id: string }) => {
     <div
       style={{
         padding: 10,
-        border: '1px solid #ddd',
-        borderRadius: 5,
         background: '#fff',
         width: '100%',
         height: '100%',
