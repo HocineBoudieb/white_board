@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { NodeProps } from 'reactflow';
 
 interface Point {
@@ -15,8 +15,6 @@ interface DrawingNodeData {
 }
 
 export function DrawingNode({ data, id, xPos, yPos }: NodeProps<DrawingNodeData>) {
-  const [isHovered, setIsHovered] = useState(false);
-
   if (!data || !data.lines || data.lines.length === 0) {
     return null;
   }
@@ -24,10 +22,6 @@ export function DrawingNode({ data, id, xPos, yPos }: NodeProps<DrawingNodeData>
   const color = data.color || 'black';
   const strokeWidth = data.strokeWidth || 2;
   const opacity = data.opacity || 1;
-
-  const handleDelete = () => {
-    data.setNodes((nodes: any) => nodes.filter((n: any) => n.id !== id));
-  };
 
   const allPoints = data.lines.flat();
   if (allPoints.length === 0) {
@@ -43,42 +37,35 @@ export function DrawingNode({ data, id, xPos, yPos }: NodeProps<DrawingNodeData>
 
   return (
     <div
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      data-id={id}
+      className="drawing-node-container"
       style={{
         width: '100%',
         height: '100%',
         position: 'relative',
+        pointerEvents: 'none',
       }}
     >
-      {isHovered && (
-        <button
-          onClick={handleDelete}
-          style={{
-            position: 'absolute',
-            top: 0,
-            right: 0,
-            background: 'red',
-            color: 'white',
-            border: 'none',
-            borderRadius: '50%',
-            width: '20px',
-            height: '20px',
-            cursor: 'pointer',
-            zIndex: 10,
-          }}
-        >
-          X
-        </button>
-      )}
       <svg
         style={{
           width: '100%',
           height: '100%',
           overflow: 'visible',
           opacity: opacity,
+          pointerEvents: 'none',
         }}
       >
+        {/* Hitbox path - invisible but thicker */}
+        <path
+          d={pathData}
+          stroke="transparent"
+          strokeWidth={Math.max(strokeWidth + 20, 25)}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+          style={{ pointerEvents: 'auto', cursor: 'crosshair' }}
+        />
+        {/* Visible path */}
         <path
           d={pathData}
           stroke={color}
@@ -86,7 +73,7 @@ export function DrawingNode({ data, id, xPos, yPos }: NodeProps<DrawingNodeData>
           strokeLinecap="round"
           strokeLinejoin="round"
           fill="none"
-          style={{ pointerEvents: 'all' }}
+          style={{ pointerEvents: 'none' }}
         />
       </svg>
     </div>

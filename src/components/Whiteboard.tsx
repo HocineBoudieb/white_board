@@ -62,7 +62,7 @@ export type WhiteboardHandle = {
   saveNow: () => void;
 };
 
-export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: string; name: string }[]) => void; initialNodes?: Node[]; initialEdges?: Edge[]; projectId?: string; title?: string; userStatus?: any; tool?: 'cursor' | 'markdown' | 'image' | 'postit' | 'highlighter' }>(function Whiteboard({ onGroupsChange, initialNodes = defaultInitialNodes, initialEdges = defaultInitialEdges, projectId, title, userStatus, tool = 'cursor' }, ref) {
+export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: string; name: string }[]) => void; initialNodes?: Node[]; initialEdges?: Edge[]; projectId?: string; title?: string; userStatus?: any; tool?: 'cursor' | 'markdown' | 'image' | 'postit' | 'highlighter' | 'eraser' }>(function Whiteboard({ onGroupsChange, initialNodes = defaultInitialNodes, initialEdges = defaultInitialEdges, projectId, title, userStatus, tool = 'cursor' }, ref) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [showLimitModal, setShowLimitModal] = useState(false);
@@ -696,7 +696,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
       });
 
       // Handle tools on pane click
-      if (tool !== 'cursor' && tool !== 'highlighter') {
+      if (tool !== 'cursor' && tool !== 'highlighter' && tool !== 'eraser') {
         const newId = uuidv4();
         let newNode: Node | null = null;
 
@@ -792,6 +792,10 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
       id: newId,
       type: 'drawing',
       position: localPosition,
+      draggable: false,
+      selectable: false,
+      deletable: false,
+      className: 'drawing-node',
       data: { 
         lines: [[{ x: 0, y: 0 }]], 
         setNodes,
@@ -813,6 +817,21 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
   };
 
   const onMouseMove = (event: React.MouseEvent) => {
+    // Handle eraser drag
+    if (tool === 'eraser' && event.buttons === 1) {
+      const target = document.elementFromPoint(event.clientX, event.clientY);
+      if (target) {
+        const drawingNode = target.closest('.drawing-node-container');
+        if (drawingNode) {
+          const nodeId = drawingNode.getAttribute('data-id');
+          if (nodeId) {
+            setNodes((nds) => nds.filter((n) => n.id !== nodeId));
+          }
+        }
+      }
+      return;
+    }
+
     if (!isDrawing.current || !currentDrawing.current) return;
 
     const point = screenToFlowPosition({ x: event.clientX, y: event.clientY });
@@ -878,6 +897,13 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
 
   const onNodeClick = useCallback(
     (event: React.MouseEvent, node: Node) => {
+      if (tool === 'eraser') {
+        if (node.type === 'drawing') {
+          setNodes((nds) => nds.filter((n) => n.id !== node.id));
+        }
+        return;
+      }
+
       if (tool && tool !== 'cursor' && node.type === 'group') {
         const position = screenToFlowPosition({
           x: event.clientX,
@@ -969,12 +995,21 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
           transition: box-shadow 0.2s ease, opacity 0.2s ease;
         }
 
-        .react-flow__node:hover {
+        .react-flow__node.drawing-node {
+          pointer-events: none;
+        }
+
+        .react-flow__node.drawing-node path {
+          pointer-events: stroke;
+          cursor: crosshair;
+        }
+
+        .react-flow__node:not(.drawing-node):hover {
           transform: scale(1.02);
           box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
         }
 
-        .react-flow__node.selected {
+        .react-flow__node:not(.drawing-node).selected {
           box-shadow: 0 0 0 2px #3182ce, 0 8px 20px rgba(49, 130, 206, 0.3);
           transform: scale(1.02);
         }
@@ -1072,11 +1107,11 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
         onNodeDoubleClick={onNodeDoubleClick}
         nodeTypes={nodeTypes}
         proOptions={proOptions}
-        panOnDrag={tool !== 'highlighter'}
-        panOnScroll={tool !== 'highlighter'}
-        selectionOnDrag={tool !== 'highlighter'}
-        nodesDraggable={tool !== 'highlighter'}
-        nodesConnectable={tool !== 'highlighter'}
+        panOnDrag={tool !== 'highlighter' && tool !== 'eraser'}
+        panOnScroll={tool !== 'highlighter' && tool !== 'eraser'}
+        selectionOnDrag={tool !== 'highlighter' && tool !== 'eraser'}
+        nodesDraggable={tool !== 'highlighter' && tool !== 'eraser'}
+        nodesConnectable={tool !== 'highlighter' && tool !== 'eraser'}
         elementsSelectable={tool !== 'highlighter'}
       >
         <Controls />

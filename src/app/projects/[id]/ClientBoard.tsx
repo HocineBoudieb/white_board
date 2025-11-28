@@ -4,7 +4,7 @@ import React from 'react';
 import Whiteboard from '@/components/Whiteboard';
 import { ReactFlowProvider, Node, Edge } from 'reactflow';
 import { useRouter } from 'next/navigation';
-import { MousePointer2, Type, Image as ImageIcon, StickyNote, Highlighter, ArrowLeft, Save } from 'lucide-react';
+import { MousePointer2, Type, Image as ImageIcon, StickyNote, Highlighter, ArrowLeft, Save, Eraser } from 'lucide-react';
 
 function fixEmbeddings(nodes: any[]): any[] {
   return (Array.isArray(nodes) ? nodes : []).map((n: any) => {
@@ -21,7 +21,7 @@ export default function ClientBoard({ id, initialTitle, initialNodes, initialEdg
   const [collapsed, setCollapsed] = React.useState<boolean>(false);
   const [groups, setGroups] = React.useState<{ id: string; name: string }[]>([]);
   const whiteboardRef = React.useRef<any>(null);
-  const [tool, setTool] = React.useState<'cursor' | 'markdown' | 'image' | 'postit' | 'highlighter'>('cursor');
+  const [tool, setTool] = React.useState<'cursor' | 'markdown' | 'image' | 'postit' | 'highlighter' | 'eraser'>('cursor');
   const router = useRouter();
 
   const nodesFixed = React.useMemo(() => fixEmbeddings(initialNodes as any[]), [initialNodes]);
@@ -206,6 +206,25 @@ export default function ClientBoard({ id, initialTitle, initialNodes, initialEdg
           }}
         >
           <Highlighter size={20} />
+        </button>
+        <button
+          onClick={() => setTool('eraser')}
+          title="Gomme"
+          style={{
+            padding: '10px',
+            background: tool === 'eraser' ? '#000' : '#fff',
+            color: tool === 'eraser' ? '#fff' : '#000',
+            border: '2px solid #000',
+            cursor: 'pointer',
+            transition: 'all 0.1s',
+            transform: tool === 'eraser' ? 'translate(2px, 2px)' : 'none',
+            boxShadow: tool === 'eraser' ? 'none' : '2px 2px 0px 0px #000',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Eraser size={20} />
         </button>
       </div>
     </main>
