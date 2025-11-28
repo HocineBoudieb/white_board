@@ -63,6 +63,7 @@ export function DrawingNode({ data, id, xPos, yPos }: NodeProps<DrawingNodeData>
           strokeLinecap="round"
           strokeLinejoin="round"
           fill="none"
+          style={{ pointerEvents: 'none' }}
         />
         {/* Visible path */}
         <path

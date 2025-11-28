@@ -529,7 +529,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
                   },
                   parentNode: originNode.parentNode,
                   extent: originNode.extent,
-                  style: { width: sz.w, height: sz.h },
+                  style: { width: sz.w, height: sz.h, pointerEvents: 'none' },
                 };
                 break;
               case 'mermaid':
@@ -796,6 +796,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
       selectable: false,
       deletable: false,
       className: 'drawing-node',
+      style: { pointerEvents: 'none' },
       data: { 
         lines: [[{ x: 0, y: 0 }]], 
         setNodes,

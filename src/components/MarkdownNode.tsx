@@ -1,21 +1,26 @@
 import { NodeResizer } from '@reactflow/node-resizer';
 import { NodeProps, Handle, Position, useReactFlow } from 'reactflow';
 import ReactMarkdown from 'react-markdown';
-import { useState, useEffect, useCallback } from 'react';
-import dynamic from 'next/dynamic';
-import "easymde/dist/easymde.min.css";
+import { useState, useEffect, useCallback, useRef } from 'react';
 import styles from './MarkdownNode.module.css';
 
-const SimpleMdeEditor = dynamic(() => import("react-simplemde-editor"), { ssr: false });
-
-export function MarkdownNode({ id, data }: NodeProps) {
+export function MarkdownNode({ id, data, selected }: NodeProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState(data.text);
   const { setNodes } = useReactFlow();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     setText(data.text);
   }, [data.text]);
+
+  useEffect(() => {
+    if (isEditing && textareaRef.current) {
+      textareaRef.current.focus();
+      // Optional: Move cursor to end
+      textareaRef.current.setSelectionRange(textareaRef.current.value.length, textareaRef.current.value.length);
+    }
+  }, [isEditing]);
 
   const handleDoubleClick = useCallback(() => {
     setIsEditing(true);
@@ -33,34 +38,30 @@ export function MarkdownNode({ id, data }: NodeProps) {
     );
   }, [id, text, setNodes]);
 
-  const onTextChange = (value: string) => {
-    setText(value);
+  const onTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setText(e.target.value);
   };
 
   return (
     <>
-      <NodeResizer minWidth={100} minHeight={30} />
+      <NodeResizer isVisible={selected} minWidth={200} minHeight={100} />
       <Handle type="target" position={Position.Left} />
       <div 
-        style={{ padding: 10, width: '100%', height: '100%' }} 
+        className={styles.container}
         onDoubleClick={handleDoubleClick} 
-        className={styles['markdown-content']}
       >
         {isEditing ? (
-          <div onMouseDown={(e) => e.stopPropagation()} onBlur={handleBlur}>
-            <SimpleMdeEditor
-              value={text}
-              onChange={onTextChange}
-              options={{
-                autofocus: true,
-                spellChecker: false,
-                status: false,
-                toolbar: false,
-              }}
-            />
-          </div>
+          <textarea
+            ref={textareaRef}
+            value={text}
+            onChange={onTextChange}
+            onBlur={handleBlur}
+            className={`${styles.editor} nodrag`}
+            onMouseDown={(e) => e.stopPropagation()}
+            placeholder="Write markdown here..."
+          />
         ) : (
-          <div style={{ width: '100%', height: '100%', cursor: 'move' }}>
+          <div className={styles.markdownContent}>
             <ReactMarkdown>{text || '*Double-click to edit*'}</ReactMarkdown>
           </div>
         )}
