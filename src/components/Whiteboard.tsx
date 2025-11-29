@@ -62,6 +62,42 @@ export type WhiteboardHandle = {
   saveNow: () => void;
 };
 
+const calculateNodeSize = (type: string, data: any) => {
+  let w = 220;
+  let h = 200;
+
+  if (type === 'markdown' && data?.text) {
+    const lines = data.text.split('\n');
+    const maxLineLength = Math.max(...lines.map((l: string) => l.length), 0);
+    const contentWidth = maxLineLength * 8 + 40;
+    w = Math.min(600, Math.max(300, contentWidth));
+    const contentHeight = lines.length * 24 + 60;
+    h = Math.min(800, Math.max(200, contentHeight));
+  } else if (type === 'todo' && Array.isArray(data?.items)) {
+    const items = data.items;
+    const maxItemLength = Math.max(...items.map((i: any) => (i.text || '').length), 0);
+    const contentWidth = maxItemLength * 8 + 60;
+    w = Math.min(500, Math.max(300, contentWidth));
+    const contentHeight = items.length * 32 + 80;
+    h = Math.min(800, Math.max(250, contentHeight));
+  } else {
+    switch (type) {
+      case 'image': return { w: 220, h: 260 };
+      case 'drawing': return { w: 220, h: 180 };
+      case 'mermaid': return { w: 220, h: 220 };
+      case 'flashcard': return { w: 220, h: 180 };
+      case 'quiz': return { w: 220, h: 250 };
+      case 'timeline': return { w: 220, h: 300 };
+      case 'definition': return { w: 220, h: 200 };
+      case 'formula': return { w: 220, h: 200 };
+      case 'comparison': return { w: 220, h: 250 };
+      case 'progress': return { w: 220, h: 200 };
+      default: return { w: 220, h: 200 };
+    }
+  }
+  return { w, h };
+};
+
 export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: string; name: string }[]) => void; initialNodes?: Node[]; initialEdges?: Edge[]; projectId?: string; title?: string; userStatus?: any; tool?: 'cursor' | 'markdown' | 'image' | 'postit' | 'highlighter' | 'eraser' | 'pen' }>(function Whiteboard({ onGroupsChange, initialNodes = defaultInitialNodes, initialEdges = defaultInitialEdges, projectId, title, userStatus, tool = 'cursor' }, ref) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
@@ -506,20 +542,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
           const newNodes: Node[] = [];
           const parent = originNode.parentNode ? getNode(originNode.parentNode) : null;
           const padding = 16;
-          const sizes: Record<string, { w: number; h: number }> = {
-            markdown: { w: 220, h: 180 },
-            todo: { w: 220, h: 220 },
-            image: { w: 220, h: 260 },
-            drawing: { w: 220, h: 180 },
-            mermaid: { w: 220, h: 220 },
-            flashcard: { w: 220, h: 180 },
-            quiz: { w: 220, h: 250 },
-            timeline: { w: 220, h: 300 },
-            definition: { w: 220, h: 200 },
-            formula: { w: 220, h: 200 },
-            comparison: { w: 220, h: 250 },
-            progress: { w: 220, h: 200 },
-          };
+          // Sizes removed from here as they are handled dynamically
           const baseXLocal = originNode.position.x + (originNode.width || 0) + 20;
           const startYLocal = originNode.position.y;
           let colX = baseXLocal;
@@ -531,7 +554,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
 
             let newNode: Node | null = null;
             const type = nodeData.type;
-            const sz = sizes[type] || { w: 220, h: 200 };
+            const sz = calculateNodeSize(type, nodeData.data);
             if (parentHeight !== Infinity && colY + sz.h + padding > parentHeight) {
               colX += sz.w + padding;
               colY = startYLocal;
@@ -776,7 +799,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
             type: 'markdown',
             position,
             data: { text: '' },
-            style: { width: 220, height: 180 },
+            style: { width: 400, height: 300 },
           };
         } else if (tool === 'postit') {
           newNode = {

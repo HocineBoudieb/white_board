@@ -25,7 +25,7 @@ export function TodoNode({ data }: NodeProps) {
     <>
       <NodeResizer minWidth={200} minHeight={100} />
       <Handle type="target" position={Position.Left} />
-      <div style={{ padding: 10 }}>
+      <div style={{ height: '100%', width: '100%', overflowY: 'auto', padding: 10 }}>
         {items.map((item: any, index: number) => (
           <div key={index} style={{ display: 'flex', alignItems: 'center' }}>
             <input
