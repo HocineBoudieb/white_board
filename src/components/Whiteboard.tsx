@@ -66,6 +66,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [showLimitModal, setShowLimitModal] = useState(false);
+  const [copiedNodes, setCopiedNodes] = useState<Node[]>([]);
   const reactFlow = useReactFlow();
   const { screenToFlowPosition, getNodes, getNode } = reactFlow;
   const lastClickTime = React.useRef(0);
@@ -74,6 +75,67 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
   const drawingStartPos = React.useRef({ x: 0, y: 0 });
   const workerRef = React.useRef<Worker | null>(null);
   const saveTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        document.activeElement instanceof HTMLInputElement ||
+        document.activeElement instanceof HTMLTextAreaElement ||
+        (document.activeElement as HTMLElement)?.isContentEditable
+      ) {
+        return;
+      }
+
+      // Copy: Ctrl+C or Cmd+C
+      if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
+        const selectedNodes = getNodes().filter((node) => node.selected);
+        if (selectedNodes.length > 0) {
+          setCopiedNodes(selectedNodes);
+        }
+      }
+
+      // Paste: Ctrl+V or Cmd+V
+      if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
+        if (copiedNodes.length > 0) {
+          event.preventDefault();
+          
+          // 1. Generate new IDs and map old->new
+          const idMap = new Map<string, string>();
+          copiedNodes.forEach(node => {
+            idMap.set(node.id, uuidv4());
+          });
+
+          // 2. Create new nodes with updated IDs and parentNode refs
+          const newNodes = copiedNodes.map((node) => {
+            const newId = idMap.get(node.id)!;
+            const newParentId = node.parentNode && idMap.has(node.parentNode) 
+                ? idMap.get(node.parentNode) 
+                : node.parentNode;
+
+            return {
+              ...node,
+              id: newId,
+              parentNode: newParentId,
+              position: {
+                x: node.position.x + 50,
+                y: node.position.y + 50,
+              },
+              selected: true,
+              data: { ...node.data }, // Shallow copy data
+            };
+          });
+
+          setNodes((nds) => nds.map((n) => ({ ...n, selected: false })).concat(newNodes));
+          setCopiedNodes(newNodes);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [copiedNodes, getNodes, setNodes]);
 
   React.useEffect(() => {
     // Initialize the worker
