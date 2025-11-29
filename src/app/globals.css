@@ -182,3 +182,14 @@ body {
   opacity: 0.85;
   pointer-events: none;
 }
+
+/* Increase hitbox for resize handles without changing visual style */
+.react-flow__resize-control.handle::after {
+  content: "";
+  position: absolute;
+  top: -30px;
+  left: -30px;
+  right: -30px;
+  bottom: -30px;
+  border-radius: 50%;
+}
