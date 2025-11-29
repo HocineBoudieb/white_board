@@ -32,7 +32,9 @@ import ComparisonTableNode from './ComparisonTableNode';
 import ProgressTrackerNode from './ProgressTrackerNode';
 import { PostItNode } from './PostItNode';
 import { LimitModal } from './LimitModal';
+import { AiEditDialog } from './AiEditDialog';
 import { searchSimilarChunks, batchGenerateEmbeddings } from '../utils/vectorStore';
+import { Wand2 } from 'lucide-react';
 const proOptions = { hideAttribution: true };
 
 const defaultInitialNodes: Node[] = [];
@@ -103,6 +105,9 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [copiedNodes, setCopiedNodes] = useState<Node[]>([]);
+  const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null);
+  const [aiEditNodeId, setAiEditNodeId] = useState<string | null>(null);
+  const [isAiEditing, setIsAiEditing] = useState(false);
   const reactFlow = useReactFlow();
   const { screenToFlowPosition, getNodes, getNode } = reactFlow;
   const lastClickTime = React.useRef(0);
@@ -373,6 +378,18 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
   const onConnect = useCallback(
     (params: any) => setEdges((eds) => addEdge(params, eds)),
     [setEdges],
+  );
+
+  const onNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      event.preventDefault();
+      setMenu({
+        id: node.id,
+        top: event.clientY,
+        left: event.clientX,
+      });
+    },
+    []
   );
 
   const handleNodesChange = useCallback(
@@ -773,8 +790,171 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
       });
     }, [getNode, setNodes]);
 
+  const handleAiEdit = async (instructions: string) => {
+    if (!aiEditNodeId) return;
+    const node = getNode(aiEditNodeId);
+    if (!node) return;
+
+    setAiEditNodeId(null); 
+
+    // Add loading state to the node
+    setNodes((nds) => nds.map((n) => {
+      if (n.id === node.id) {
+        return { ...n, className: `${n.className || ''} thinking-node`.trim() };
+      }
+      return n;
+    }));
+
+    const context = JSON.stringify({
+        type: node.type,
+        data: node.data
+    }, null, 2);
+
+    const prompt = `
+Context (Current Node):
+${context}
+
+Instructions:
+${instructions}
+
+Task:
+Based on the instructions and the current node context, either UPDATE the existing node or CREATE new nodes.
+- If the instructions imply modifying the current node (e.g., "translate this", "fix typo", "change color"), return an "update" action with the modified node data.
+- If the instructions imply creating something new based on this node (e.g., "generate a quiz from this", "create a todo list based on this"), return a "create" action with the new node(s).
+
+Response Format:
+Return ONLY a valid JSON object with this structure:
+{
+  "action": "update" | "create",
+  "nodes": [
+    {
+      "type": "...",
+      "data": { ... }
+    }
+  ]
+}
+
+If action is "update", the "nodes" array must contain exactly one node (the updated version of the current node).
+If action is "create", the "nodes" array can contain one or more new nodes.
+
+Available node types: markdown, todo, image, drawing, mermaid, flashcard, quiz, timeline, definition, formula, comparison, progress.
+`;
+
+    try {
+      setIsAiEditing(true);
+      const response = await fetch('/api/groq', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: prompt }]
+        })
+      });
+
+      if (response.status === 403) {
+        setShowLimitModal(true);
+        return;
+      }
+
+      if (!response.body) return;
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let sepIndex = buffer.indexOf('\n\n');
+        while (sepIndex !== -1) {
+          const eventChunk = buffer.slice(0, sepIndex);
+          buffer = buffer.slice(sepIndex + 2);
+
+          const dataLines = eventChunk
+            .split('\n')
+            .filter((line) => line.startsWith('data:'));
+          
+          if (dataLines.length > 0) {
+             const jsonStr = dataLines
+               .map((line) => line.replace(/^data:\s*/, ''))
+               .join('');
+             try {
+               const evt = JSON.parse(jsonStr);
+               if (evt.type === 'text-delta' && typeof evt.delta === 'string') {
+                 fullText += evt.delta;
+               }
+             } catch (e) { }
+          }
+          sepIndex = buffer.indexOf('\n\n');
+        }
+      }
+
+      // Parse final JSON
+      let cleanedText = fullText.trim();
+      if (cleanedText.startsWith('```json')) {
+        cleanedText = cleanedText.replace(/^```json\s*/, '').replace(/```\s*$/, '');
+      } else if (cleanedText.startsWith('```')) {
+        cleanedText = cleanedText.replace(/^```\s*/, '').replace(/```\s*$/, '');
+      }
+
+      const result = JSON.parse(cleanedText);
+      
+      if (result.action === 'update' && result.nodes && result.nodes.length > 0) {
+        const updatedData = result.nodes[0];
+        setNodes((nds) => nds.map((n) => {
+            if (n.id === node.id) {
+                const sz = calculateNodeSize(updatedData.type, updatedData.data);
+                return {
+                    ...n,
+                    type: updatedData.type,
+                    data: { ...updatedData.data, setNodes }, // Ensure callbacks are preserved/added
+                    style: { ...n.style, width: sz.w, height: sz.h }
+                };
+            }
+            return n;
+        }));
+      } else if (result.action === 'create' && result.nodes && result.nodes.length > 0) {
+        const newNodes: Node[] = [];
+        let colX = node.position.x + (node.width || 200) + 50;
+        let colY = node.position.y;
+        
+        result.nodes.forEach((nodeData: any) => {
+             const newId = `node-${uuidv4()}`;
+             const sz = calculateNodeSize(nodeData.type, nodeData.data);
+             
+             newNodes.push({
+                 id: newId,
+                 type: nodeData.type,
+                 position: { x: colX, y: colY },
+                 data: { ...nodeData.data, setNodes },
+                 parentNode: node.parentNode,
+                 extent: node.extent,
+                 style: { width: sz.w, height: sz.h }
+             });
+             
+             colY += sz.h + 20;
+        });
+        
+        setNodes((nds) => nds.concat(newNodes));
+      }
+
+    } catch (error) {
+      console.error('AI Edit Error:', error);
+    } finally {
+      setIsAiEditing(false);
+      setNodes((nds) => nds.map((n) => {
+        if (n.id === node.id) {
+            return { ...n, className: (n.className || '').replace('thinking-node', '').trim() };
+        }
+        return n;
+      }));
+    }
+  };
+
   const onPaneClick = useCallback(
     (event: any) => {
+      setMenu(null);
       const position = screenToFlowPosition({
         x: event.clientX,
         y: event.clientY,
@@ -1221,6 +1401,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
         onPaneClick={onPaneClick}
         onNodeClick={onNodeClick}
         onNodeDoubleClick={onNodeDoubleClick}
+        onNodeContextMenu={onNodeContextMenu}
         nodeTypes={nodeTypes}
         proOptions={proOptions}
         panOnDrag={tool !== 'highlighter' && tool !== 'eraser' && tool !== 'pen'}
@@ -1234,6 +1415,37 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
         <MiniMap />
         <Background color="#ccc" variant={BackgroundVariant.Dots} gap={12} size={1} />
       </ReactFlow>
+
+      {menu && (
+        <div
+          style={{
+            position: 'fixed',
+            top: menu.top,
+            left: menu.left,
+            zIndex: 1000,
+          }}
+          className="bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] py-2 min-w-[200px]"
+        >
+          <button
+            className="w-full text-left px-4 py-2 hover:bg-gray-100 font-bold text-sm uppercase flex items-center gap-2"
+            onClick={() => {
+              setAiEditNodeId(menu.id);
+              setMenu(null);
+            }}
+          >
+            <Wand2 size={16} />
+            Demander à l'IA
+          </button>
+        </div>
+      )}
+      
+      <AiEditDialog
+        isOpen={!!aiEditNodeId}
+        onClose={() => setAiEditNodeId(null)}
+        onSubmit={handleAiEdit}
+        isLoading={isAiEditing}
+      />
+
       <LimitModal 
         isOpen={showLimitModal} 
         onClose={() => setShowLimitModal(false)} 
