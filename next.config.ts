@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
               "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://www.google.com https://apis.google.com; " +
               "script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://www.google.com https://apis.google.com; " +
               "style-src 'self' 'unsafe-inline'; " +
-              "img-src 'self' data: blob: https://lh3.googleusercontent.com; " +
+              "img-src 'self' data: blob: https://lh3.googleusercontent.com https://images.unsplash.com; " +
               "connect-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.0/dist/ " +
               "https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://fraymwb.firebaseapp.com https://apis.google.com; " +
               "frame-src 'self' https://fraymwb.firebaseapp.com https://accounts.google.com https://www.google.com https://www.gstatic.com https://apis.google.com; " +

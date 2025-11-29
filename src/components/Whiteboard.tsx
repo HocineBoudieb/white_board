@@ -441,7 +441,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
         )
       );
 
-      const content = `${context ? `${context}\n\n` : ''}${text}\n\nIMPORTANT: Respond ONLY with a valid JSON array of nodes. Do not include any other text, explanation, or markdown formatting.\n\nEach node should have this structure:\n{\n  "type": "markdown" | "todo" | "image" | "drawing" | "mermaid" | "flashcard" | "quiz" | "timeline" | "definition" | "formula" | "comparison" | "progress",\n  "data": { ... }\n}\n\nAvailable node types:\n- markdown: { "text": "markdown content" }\n- todo: { "items": [{ "text": "item text", "completed": false }] }\n- image: { "url": "image url" }\n- drawing: { "lines": [[{"x": 0, "y": 0}, {"x": 10, "y": 10}]] }\n- mermaid: { "text": "mermaid diagram syntax" }\n- flashcard: { "front": "recto", "back": "verso" }\n- quiz: { "question": "Q?", "choices": [{ "id": "1", "text": "A", "correct": true }, { "id": "2", "text": "B", "correct": false }], "explanation": "optional" }\n- timeline: { "events": [{ "id": "1", "date": "2024-01-01", "title": "Event", "description": "optional" }] }\n- definition: { "term": "Mot", "definition": "Définition", "example": "optional", "tags": ["tag1"] }\n- formula: { "latex": "a + b", "variables": { "a": 1, "b": 2 } }\n- comparison: { "headers": ["A", "B"], "rows": [{ "id": "1", "label": "Critère", "col1": "val A", "col2": "val B" }] }\n- progress: { "current": 75, "milestones": [{ "id": "1", "label": "Done", "completed": true }], "stats": [{ "label": "Heures", "value": "12h" }] }\n\nExample response:\n[\n  {\n    "type": "markdown",\n    "data": {\n      "text": "# Hello\\nThis is markdown"\n    }\n  },\n  {\n    "type": "todo",\n    "data": {\n      "items": [\n        { "text": "Task 1", "completed": false },\n        { "text": "Task 2", "completed": true }\n      ]\n    }\n  }\n]\n\nRespond with ONLY the JSON array, nothing else.`;
+      const content = `${context ? `${context}\n\n` : ''}${text}\n\nIMPORTANT: Respond ONLY with a valid JSON array of nodes. Do not include any other text, explanation, or markdown formatting.\n\nIf you want to respond with an image, you MUST use the 'image' node type with the 'unsplashQuery' field. DO NOT provide a URL yourself unless specifically asked. The system will handle fetching the image from Unsplash based on your query. DO NOT use placeholder URLs like picsum.photos.\n\nEach node should have this structure:\n{\n  "type": "markdown" | "todo" | "image" | "drawing" | "mermaid" | "flashcard" | "quiz" | "timeline" | "definition" | "formula" | "comparison" | "progress",\n  "data": { ... }\n}\n\nAvailable node types:\n- markdown: { "text": "markdown content" }\n- todo: { "items": [{ "text": "item text", "completed": false }] }\n- image: { "url": "", "unsplashQuery": "REQUIRED if you want to generate an image from a description (e.g. 'cat', 'sunset')" }\n- drawing: { "lines": [[{"x": 0, "y": 0}, {"x": 10, "y": 10}]] }\n- mermaid: { "text": "mermaid diagram syntax" }\n- flashcard: { "front": "recto", "back": "verso" }\n- quiz: { "question": "Q?", "choices": [{ "id": "1", "text": "A", "correct": true }, { "id": "2", "text": "B", "correct": false }], "explanation": "optional" }\n- timeline: { "events": [{ "id": "1", "date": "2024-01-01", "title": "Event", "description": "optional" }] }\n- definition: { "term": "Mot", "definition": "Définition", "example": "optional", "tags": ["tag1"] }\n- formula: { "latex": "a + b", "variables": { "a": 1, "b": 2 } }\n- comparison: { "headers": ["A", "B"], "rows": [{ "id": "1", "label": "Critère", "col1": "val A", "col2": "val B" }] }\n- progress: { "current": 75, "milestones": [{ "id": "1", "label": "Done", "completed": true }], "stats": [{ "label": "Heures", "value": "12h" }] }\n\nExample response:\n[\n  {\n    "type": "markdown",\n    "data": {\n      "text": "# Hello\\nThis is markdown"\n    }\n  },\n  {\n    "type": "todo",\n    "data": {\n      "items": [\n        { "text": "Task 1", "completed": false },\n        { "text": "Task 2", "completed": true }\n      ]\n    }\n  },\n  {\n    "type": "image",\n    "data": {\n      "unsplashQuery": "mountain landscape"\n    }\n  }\n]\n\nRespond with ONLY the JSON array, nothing else.`;
 
       console.log('AI request (text):', text);
       console.log('AI request (context length):', context ? context.length : 0);
@@ -618,6 +618,37 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
                   extent: originNode.extent,
                   style: { width: sz.w, height: sz.h },
                 };
+
+                if (nodeData.data.unsplashQuery) {
+                  console.log('Processing Unsplash query:', nodeData.data.unsplashQuery);
+                  fetch(`/api/unsplash/search?query=${encodeURIComponent(nodeData.data.unsplashQuery)}`)
+                    .then((res) => {
+                      console.log('Unsplash response status:', res.status);
+                      return res.json();
+                    })
+                    .then((data) => {
+                      console.log('Unsplash response data:', data);
+                      if (data.url) {
+                        console.log('Unsplash image found:', {
+                          query: nodeData.data.unsplashQuery,
+                          url: data.url,
+                          alt: data.alt,
+                          credit: data.credit,
+                        });
+                        setNodes((nds) =>
+                          nds.map((n) =>
+                            n.id === newId ? { ...n, data: { ...n.data, url: data.url } } : n
+                          )
+                        );
+                      }
+                      else{
+                        console.error('No unsplash url', data);
+                      }
+                    })
+                    .catch((err) => console.error('Unsplash fetch failed', err));
+                } else {
+                  console.log('Image node processing: No unsplashQuery found', nodeData);
+                }
                 break;
 
               case 'drawing':
@@ -837,7 +868,8 @@ Return ONLY a valid JSON object with this structure:
 If action is "update", the "nodes" array must contain exactly one node (the updated version of the current node).
 If action is "create", the "nodes" array can contain one or more new nodes.
 
-Available node types: markdown, todo, image, drawing, mermaid, flashcard, quiz, timeline, definition, formula, comparison, progress.
+Available node types: markdown, todo, image (supports unsplashQuery), drawing, mermaid, flashcard, quiz, timeline, definition, formula, comparison, progress.
+If you want to generate an image, you MUST use the 'image' node type with the 'unsplashQuery' field. DO NOT provide a URL yourself unless specifically asked. DO NOT use placeholder URLs like picsum.photos.
 `;
 
     try {
@@ -914,6 +946,17 @@ Available node types: markdown, todo, image, drawing, mermaid, flashcard, quiz, 
             }
             return n;
         }));
+
+        if (updatedData.type === 'image' && updatedData.data.unsplashQuery) {
+             fetch(`/api/unsplash/search?query=${encodeURIComponent(updatedData.data.unsplashQuery)}`)
+               .then(res => res.json())
+               .then(data => {
+                 if (data.url) {
+                   setNodes(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, url: data.url } } : n));
+                 }
+               })
+               .catch(err => console.error('Unsplash fetch failed', err));
+        }
       } else if (result.action === 'create' && result.nodes && result.nodes.length > 0) {
         const newNodes: Node[] = [];
         let colX = node.position.x + (node.width || 200) + 50;
@@ -932,6 +975,17 @@ Available node types: markdown, todo, image, drawing, mermaid, flashcard, quiz, 
                  extent: node.extent,
                  style: { width: sz.w, height: sz.h }
              });
+
+             if (nodeData.type === 'image' && nodeData.data.unsplashQuery) {
+                 fetch(`/api/unsplash/search?query=${encodeURIComponent(nodeData.data.unsplashQuery)}`)
+                   .then(res => res.json())
+                   .then(data => {
+                     if (data.url) {
+                       setNodes(nds => nds.map(n => n.id === newId ? { ...n, data: { ...n.data, url: data.url } } : n));
+                     }
+                   })
+                   .catch(err => console.error('Unsplash fetch failed', err));
+             }
              
              colY += sz.h + 20;
         });
@@ -1300,12 +1354,12 @@ Available node types: markdown, todo, image, drawing, mermaid, flashcard, quiz, 
           pointer-events: none;
         }
 
-        .react-flow__node:not(.drawing-node):hover {
+        .react-flow__node:not(.drawing-node):not(.react-flow__node-group):hover {
           transform: scale(1.02);
           box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
         }
 
-        .react-flow__node:not(.drawing-node).selected {
+        .react-flow__node:not(.drawing-node):not(.react-flow__node-group).selected {
           box-shadow: 0 0 0 2px #3182ce, 0 8px 20px rgba(49, 130, 206, 0.3);
           transform: scale(1.02);
         }
@@ -1380,12 +1434,12 @@ Available node types: markdown, todo, image, drawing, mermaid, flashcard, quiz, 
         }
 
         .react-flow__node-group {
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          /* transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); */
         }
 
         .react-flow__node-group:hover {
-          transform: scale(1.01);
-          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+          /* transform: scale(1.01);
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); */
         }
 
         .react-flow__node-group.selected {
