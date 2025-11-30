@@ -40,6 +40,7 @@ export async function POST(req: Request) {
   const result = await streamText({
     model: groq('qwen/qwen3-32b'),
     messages,
+    ...({ response_format: { type: 'json_object' } } as any),
     onFinish: async ({ usage }) => {
       const tokens = usage?.totalTokens || 500; // Estimate if usage not provided
       try {

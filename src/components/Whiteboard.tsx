@@ -20,6 +20,7 @@ import GroupNode from './GroupNode';
 import FileNode, { FileNodeData } from './FileNode';
 import { MarkdownNode } from './MarkdownNode';
 import { ImageNode } from './ImageNode';
+import { YoutubeNode } from './YoutubeNode';
 import { TodoNode } from './TodoNode';
 import { DrawingNode } from './DrawingNode';
 import MermaidNode from './MermaidNode';
@@ -35,6 +36,8 @@ import { LimitModal } from './LimitModal';
 import { AiEditDialog } from './AiEditDialog';
 import { searchSimilarChunks, batchGenerateEmbeddings } from '../utils/vectorStore';
 import { Wand2 } from 'lucide-react';
+import { WHITEBOARD_SYSTEM_PROMPT } from '../constants';
+
 const proOptions = { hideAttribution: true };
 
 const defaultInitialNodes: Node[] = [];
@@ -46,6 +49,7 @@ const nodeTypes = {
   file: FileNode,
   markdown: MarkdownNode,
   image: ImageNode,
+  youtube: YoutubeNode,
   postit: PostItNode,
   todo: TodoNode,
   drawing: DrawingNode,
@@ -85,6 +89,7 @@ const calculateNodeSize = (type: string, data: any) => {
   } else {
     switch (type) {
       case 'image': return { w: 220, h: 260 };
+      case 'youtube': return { w: 320, h: 240 };
       case 'drawing': return { w: 220, h: 180 };
       case 'mermaid': return { w: 220, h: 220 };
       case 'flashcard': return { w: 220, h: 180 };
@@ -100,7 +105,7 @@ const calculateNodeSize = (type: string, data: any) => {
   return { w, h };
 };
 
-export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: string; name: string }[]) => void; initialNodes?: Node[]; initialEdges?: Edge[]; projectId?: string; title?: string; userStatus?: any; tool?: 'cursor' | 'markdown' | 'image' | 'postit' | 'highlighter' | 'eraser' | 'pen' }>(function Whiteboard({ onGroupsChange, initialNodes = defaultInitialNodes, initialEdges = defaultInitialEdges, projectId, title, userStatus, tool = 'cursor' }, ref) {
+export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: string; name: string }[]) => void; initialNodes?: Node[]; initialEdges?: Edge[]; projectId?: string; title?: string; userStatus?: any; tool?: 'cursor' | 'markdown' | 'image' | 'youtube' | 'postit' | 'highlighter' | 'eraser' | 'pen' }>(function Whiteboard({ onGroupsChange, initialNodes = defaultInitialNodes, initialEdges = defaultInitialEdges, projectId, title, userStatus, tool = 'cursor' }, ref) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [showLimitModal, setShowLimitModal] = useState(false);
@@ -441,7 +446,7 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
         )
       );
 
-      const content = `${context ? `${context}\n\n` : ''}${text}\n\nIMPORTANT: Respond ONLY with a valid JSON array of nodes. Do not include any other text, explanation, or markdown formatting.\n\nIf you want to respond with an image, you MUST use the 'image' node type with the 'unsplashQuery' field. DO NOT provide a URL yourself unless specifically asked. The system will handle fetching the image from Unsplash based on your query. DO NOT use placeholder URLs like picsum.photos.\n\nEach node should have this structure:\n{\n  "type": "markdown" | "todo" | "image" | "drawing" | "mermaid" | "flashcard" | "quiz" | "timeline" | "definition" | "formula" | "comparison" | "progress",\n  "data": { ... }\n}\n\nAvailable node types:\n- markdown: { "text": "markdown content" }\n- todo: { "items": [{ "text": "item text", "completed": false }] }\n- image: { "url": "", "unsplashQuery": "REQUIRED if you want to generate an image from a description (e.g. 'cat', 'sunset')" }\n- drawing: { "lines": [[{"x": 0, "y": 0}, {"x": 10, "y": 10}]] }\n- mermaid: { "text": "mermaid diagram syntax" }\n- flashcard: { "front": "recto", "back": "verso" }\n- quiz: { "question": "Q?", "choices": [{ "id": "1", "text": "A", "correct": true }, { "id": "2", "text": "B", "correct": false }], "explanation": "optional" }\n- timeline: { "events": [{ "id": "1", "date": "2024-01-01", "title": "Event", "description": "optional" }] }\n- definition: { "term": "Mot", "definition": "Définition", "example": "optional", "tags": ["tag1"] }\n- formula: { "latex": "a + b", "variables": { "a": 1, "b": 2 } }\n- comparison: { "headers": ["A", "B"], "rows": [{ "id": "1", "label": "Critère", "col1": "val A", "col2": "val B" }] }\n- progress: { "current": 75, "milestones": [{ "id": "1", "label": "Done", "completed": true }], "stats": [{ "label": "Heures", "value": "12h" }] }\n\nExample response:\n[\n  {\n    "type": "markdown",\n    "data": {\n      "text": "# Hello\\nThis is markdown"\n    }\n  },\n  {\n    "type": "todo",\n    "data": {\n      "items": [\n        { "text": "Task 1", "completed": false },\n        { "text": "Task 2", "completed": true }\n      ]\n    }\n  },\n  {\n    "type": "image",\n    "data": {\n      "unsplashQuery": "mountain landscape"\n    }\n  }\n]\n\nRespond with ONLY the JSON array, nothing else.`;
+      const content = `${context ? `${context}\n\n` : ''}${text}\n\n${WHITEBOARD_SYSTEM_PROMPT}`;
 
       console.log('AI request (text):', text);
       console.log('AI request (context length):', context ? context.length : 0);
@@ -648,6 +653,36 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
                     .catch((err) => console.error('Unsplash fetch failed', err));
                 } else {
                   console.log('Image node processing: No unsplashQuery found', nodeData);
+                }
+                break;
+
+              case 'youtube':
+                newNode = {
+                  id: newId,
+                  type: 'youtube',
+                  position: { x: colX, y: colY },
+                  data: {
+                    videoId: nodeData.data.videoId || '',
+                  },
+                  parentNode: originNode.parentNode,
+                  extent: originNode.extent,
+                  style: { width: sz.w, height: sz.h },
+                };
+
+                if (nodeData.data.youtubeQuery) {
+                  console.log('Processing YouTube query:', nodeData.data.youtubeQuery);
+                  fetch(`/api/youtube/search?query=${encodeURIComponent(nodeData.data.youtubeQuery)}`)
+                    .then((res) => res.json())
+                    .then((data) => {
+                      if (data.videoId) {
+                        setNodes((nds) =>
+                          nds.map((n) =>
+                            n.id === newId ? { ...n, data: { ...n.data, videoId: data.videoId, title: data.title } } : n
+                          )
+                        );
+                      }
+                    })
+                    .catch((err) => console.error('YouTube fetch failed', err));
                 }
                 break;
 
@@ -868,8 +903,9 @@ Return ONLY a valid JSON object with this structure:
 If action is "update", the "nodes" array must contain exactly one node (the updated version of the current node).
 If action is "create", the "nodes" array can contain one or more new nodes.
 
-Available node types: markdown, todo, image (supports unsplashQuery), drawing, mermaid, flashcard, quiz, timeline, definition, formula, comparison, progress.
+Available node types: markdown, todo, image (supports unsplashQuery), youtube (supports youtubeQuery), drawing, mermaid, flashcard, quiz, timeline, definition, formula, comparison, progress.
 If you want to generate an image, you MUST use the 'image' node type with the 'unsplashQuery' field. DO NOT provide a URL yourself unless specifically asked. DO NOT use placeholder URLs like picsum.photos.
+If you want to include a YouTube video, you MUST use the 'youtube' node type with the 'youtubeQuery' field.
 `;
 
     try {
@@ -957,6 +993,17 @@ If you want to generate an image, you MUST use the 'image' node type with the 'u
                })
                .catch(err => console.error('Unsplash fetch failed', err));
         }
+
+        if (updatedData.type === 'youtube' && updatedData.data.youtubeQuery) {
+             fetch(`/api/youtube/search?query=${encodeURIComponent(updatedData.data.youtubeQuery)}`)
+               .then(res => res.json())
+               .then(data => {
+                 if (data.videoId) {
+                   setNodes(nds => nds.map(n => n.id === node.id ? { ...n, data: { ...n.data, videoId: data.videoId, title: data.title } } : n));
+                 }
+               })
+               .catch(err => console.error('YouTube fetch failed', err));
+        }
       } else if (result.action === 'create' && result.nodes && result.nodes.length > 0) {
         const newNodes: Node[] = [];
         let colX = node.position.x + (node.width || 200) + 50;
@@ -985,6 +1032,17 @@ If you want to generate an image, you MUST use the 'image' node type with the 'u
                      }
                    })
                    .catch(err => console.error('Unsplash fetch failed', err));
+             }
+
+             if (nodeData.type === 'youtube' && nodeData.data.youtubeQuery) {
+                 fetch(`/api/youtube/search?query=${encodeURIComponent(nodeData.data.youtubeQuery)}`)
+                   .then(res => res.json())
+                   .then(data => {
+                     if (data.videoId) {
+                       setNodes(nds => nds.map(n => n.id === newId ? { ...n, data: { ...n.data, videoId: data.videoId, title: data.title } } : n));
+                     }
+                   })
+                   .catch(err => console.error('YouTube fetch failed', err));
              }
              
              colY += sz.h + 20;
@@ -1026,6 +1084,14 @@ If you want to generate an image, you MUST use the 'image' node type with the 'u
             position,
             data: { url: '', setNodes },
             style: { width: 220, height: 260 },
+          };
+        } else if (tool === 'youtube') {
+          newNode = {
+            id: `node-${newId}`,
+            type: 'youtube',
+            position,
+            data: { videoId: '', setNodes },
+            style: { width: 320, height: 240 },
           };
         } else if (tool === 'markdown') {
           newNode = {
