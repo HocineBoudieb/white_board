@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     type: 'markdown',
     position: { x: 100, y: 100 },
     data: { 
-      text: "# Bienvenue sur Fraym ! 👋\n\nVoici comment utiliser votre board :\n\n- **Double-clic sur le fond** : Créer un nouveau groupe\n- **Double-clic sur un groupe** : Ajouter une note (ou demander à l'IA)\n- **Clic droit + Glisser** : Dessiner librement\n- **Glisser un fichier** : Importer un PDF ou une image\n\nAmusez-vous bien !" 
+      text: "# Bienvenue sur Fraym ! 👋\n\nVotre espace de travail créatif et intelligent. Voici comment le maîtriser :\n\n### 🛠️ Barre d'outils (en bas)\n* **Curseur** : Pour sélectionner et déplacer les éléments.\n* **Texte / Markdown** : Ajoutez du texte riche.\n* **Image & YouTube** : Intégrez vos médias.\n* **Post-it** : Pour vos idées rapides.\n* **Stylo, Surligneur, Gomme** : Dessinez librement.\n\n### 🖱️ Interactions Rapides\n* **Double-clic (Fond)** : Crée un nouveau groupe.\n* **Double-clic (Groupe)** : Ajoute une note dans le groupe.\n* **Clic Droit (Élément)** : ✨ **Modifier avec l'IA** (Reformuler, résumer, traduire...).\n* **Glisser-Déposer** : Importez directement vos PDF ou images.\n\n### 🚀 Astuces\n* Utilisez la barre du haut pour **naviguer entre les groupes**.\n* Sauvegardez votre travail avec le bouton en haut à droite.\n\nAmusez-vous bien !" 
     },
     width: 400,
     height: 300,

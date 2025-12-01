@@ -63,3 +63,23 @@ export async function resetAiUsage(userId: string) {
     return { success: false, error: 'Failed to reset usage' };
   }
 }
+
+export async function getAnalytics() {
+  await requireAdmin();
+  const events = await prisma.analyticsEvent.findMany({
+    orderBy: { createdAt: 'desc' },
+    take: 1000,
+  });
+
+  const toolUsage = events
+    .filter(e => e.event === 'select_tool')
+    .reduce((acc, curr) => {
+      const tool = curr.label || 'unknown';
+      acc[tool] = (acc[tool] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+  const toolUsageData = Object.entries(toolUsage).map(([name, count]) => ({ name, count }));
+
+  return { events, toolUsageData };
+}

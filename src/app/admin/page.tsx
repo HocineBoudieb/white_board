@@ -1,11 +1,12 @@
-import { getStats, getUsers } from './actions';
+import { getStats, getUsers, getAnalytics } from './actions';
 import UsersTable from './UsersTable';
+import AnalyticsDashboard from './AnalyticsDashboard';
 import { Users, FileText, CreditCard } from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminDashboard() {
-  const [stats, users] = await Promise.all([getStats(), getUsers()]);
+  const [stats, users, analytics] = await Promise.all([getStats(), getUsers(), getAnalytics()]);
 
   // Serialize dates for Client Component
   const serializedUsers = users.map(user => ({
@@ -37,6 +38,14 @@ export default async function AdminDashboard() {
           icon={<CreditCard size={24} />} 
           color="bg-white"
         />
+      </div>
+
+      {/* Analytics */}
+      <div>
+        <h2 className="text-2xl font-black mb-6 uppercase border-l-8 border-yellow-300 pl-4">
+          Analytics
+        </h2>
+        <AnalyticsDashboard toolUsageData={analytics.toolUsageData} />
       </div>
 
       {/* User Management */}
