@@ -30,7 +30,7 @@ export const PLANS = [
   {
     name: 'Team',
     slug: 'team',
-    quota: 9999, // Unlimited
+    quota: 9999, 
     aiTokens: 500000,
     price: {
       amount: 15,

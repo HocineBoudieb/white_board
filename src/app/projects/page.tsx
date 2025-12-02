@@ -7,6 +7,8 @@ import { auth } from '@/lib/firebase';
 import { signOut } from 'firebase/auth';
 
 interface UserStatus {
+  hasSelectedPlan: boolean;
+  email?: string;
   plan: {
     name: string;
     slug: string;
@@ -26,7 +28,7 @@ export default function ProjectsPage() {
   const [name, setName] = React.useState('');
   const [loading, setLoading] = React.useState(false);
   const creatingRef = React.useRef(false);
-  const [uid, setUid] = React.useState('guest');
+  const [userEmail, setUserEmail] = React.useState('');
   const [loadingProjects, setLoadingProjects] = React.useState(true);
   const [query, setQuery] = React.useState('');
   const [filter, setFilter] = React.useState<'All' | 'AZ' | 'Recent'>('All');
@@ -44,9 +46,13 @@ export default function ProjectsPage() {
     setLoadingProjects(true);
     
     // Fetch user status in parallel
-    const statusPromise = fetch('/api/user/status').then(res => res.ok ? res.json() : null);
+    const statusPromise = fetch('/api/user/status').then(res => {
+        if (res.status === 401) throw new Error('Unauthorized');
+        return res.ok ? res.json() : null;
+    });
+    
     const projectsPromise = fetch('/api/projects').then(res => {
-      if (!res.ok && res.status === 401) {
+      if (res.status === 401) {
         throw new Error('Unauthorized');
       }
       return res.json();
@@ -61,6 +67,7 @@ export default function ProjectsPage() {
           return;
         }
         setUserStatus(statusData);
+        if (statusData.email) setUserEmail(statusData.email);
       }
       
       setProjects(Array.isArray(projectsData) ? projectsData : []);
@@ -72,13 +79,6 @@ export default function ProjectsPage() {
   }, [router]);
 
   React.useEffect(() => {
-    const cookieUid = typeof document !== 'undefined' ? (document.cookie.split('; ').find((c) => c.startsWith('uid='))?.split('=')[1] || '') : '';
-    if (!cookieUid) {
-      router.replace('/login');
-      return;
-    }
-    setUid(cookieUid);
-
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('success') === 'true') {
       // Sync subscription status from Stripe
@@ -90,7 +90,7 @@ export default function ProjectsPage() {
     } else {
       load();
     }
-  }, [load, router]);
+  }, [load]);
 
   const create = async () => {
     if (creatingRef.current || loading) return;
@@ -201,7 +201,7 @@ export default function ProjectsPage() {
           <span className="text-2xl font-black tracking-tighter">FRAYM.</span>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-xs font-bold text-gray-600 hidden md:inline">{uid}</span>
+          <span className="text-xs font-bold text-gray-600 hidden md:inline">{userEmail}</span>
           
           {userStatus && (
             <div className="hidden md:flex items-center gap-3 mr-2">
@@ -397,19 +397,18 @@ export default function ProjectsPage() {
         </div>
       </main>
       {openingId && (
-        <div className="fixed inset-0 z-[999] bg-white/70 backdrop-blur-sm flex items-center justify-center">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-12 h-12 border-4 border-black border-t-transparent rounded-full animate-spin" />
-            <div className="text-lg font-black">Ouverture…</div>
-            <div className="text-sm font-mono text-gray-600">Veuillez patienter</div>
-          </div>
+        <div className="fixed inset-0 z-50 bg-white/80 backdrop-blur-sm flex items-center justify-center">
+           <div className="flex flex-col items-center gap-4">
+              <div className="w-16 h-16 border-4 border-black border-t-transparent rounded-full animate-spin"></div>
+              <div className="text-2xl font-black">Chargement...</div>
+           </div>
         </div>
       )}
-
+      
       <LimitModal 
         isOpen={showLimitModal} 
         onClose={() => setShowLimitModal(false)} 
-        description="Vous avez atteint le nombre maximum de boards autorisés pour votre plan actuel. Passez à la vitesse supérieure pour créer plus de projets."
+        description="Vous avez atteint la limite de projets pour votre plan. Passez à la vitesse supérieure !"
       />
     </div>
   );

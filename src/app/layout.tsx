@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { cookies } from 'next/headers';
 import prisma from '@/lib/prisma';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { getUid } from '@/lib/auth';
 import "./globals.css";
 import 'reactflow/dist/style.css';
 
@@ -23,8 +23,7 @@ export const metadata: Metadata = {
 
 async function getThemeColor() {
   try {
-    const cookieStore = await cookies();
-    const uid = cookieStore.get('uid')?.value;
+    const uid = await getUid();
     if (!uid) return undefined;
 
     const user = await prisma.user.findUnique({

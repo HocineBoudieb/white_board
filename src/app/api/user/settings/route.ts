@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+import { getUid } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 
 export async function GET() {
-  const cookieStore = await cookies();
-  const uid = cookieStore.get('uid')?.value;
+  const uid = await getUid();
 
   if (!uid) {
     return new NextResponse('Unauthorized', { status: 401 });
@@ -19,8 +18,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const cookieStore = await cookies();
-  const uid = cookieStore.get('uid')?.value;
+  const uid = await getUid();
 
   if (!uid) {
     return new NextResponse('Unauthorized', { status: 401 });

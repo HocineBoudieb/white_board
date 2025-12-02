@@ -1,6 +1,6 @@
-import { cookies } from 'next/headers';
 import prisma from '@/lib/prisma';
 import { redirect } from 'next/navigation';
+import { getUid } from '@/lib/auth';
 
 // Replace with actual admin emails or use env var
 const ADMIN_EMAILS = process.env.ADMIN_EMAILS 
@@ -8,8 +8,7 @@ const ADMIN_EMAILS = process.env.ADMIN_EMAILS
   : ['admin@example.com']; 
 
 export async function checkIsAdmin() {
-  const cookieStore = await cookies();
-  const uid = cookieStore.get('uid')?.value;
+  const uid = await getUid();
 
   if (!uid) {
     return false;

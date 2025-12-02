@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { cookies } from 'next/headers';
+import { getUid } from '@/lib/auth';
 
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-  const cookieStore = await cookies();
-  const uid = cookieStore.get('uid')?.value || '';
+  const uid = await getUid();
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const url = new URL(req.url);
   const match = url.pathname.match(/\/api\/projects\/(.+)$/);
@@ -18,8 +17,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
 export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-  const cookieStore = await cookies();
-  const uid = cookieStore.get('uid')?.value || '';
+  const uid = await getUid();
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const url = new URL(req.url);
   const match = url.pathname.match(/\/api\/projects\/(.+)$/);
@@ -40,8 +38,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }
 
 export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
-  const cookieStore = await cookies();
-  const uid = cookieStore.get('uid')?.value || '';
+  const uid = await getUid();
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const url = new URL(req.url);
   const match = url.pathname.match(/\/api\/projects\/(.+)$/);

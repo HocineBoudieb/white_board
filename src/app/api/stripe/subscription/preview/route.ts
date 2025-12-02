@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import prisma from '@/lib/prisma';
 import { stripe } from '@/lib/stripe';
+import { getUid } from '@/lib/auth';
 
 export async function POST(req: Request) {
   try {
-    const cookieStore = await cookies();
-    const uid = cookieStore.get('uid')?.value;
+    const uid = await getUid();
 
     if (!uid) {
       return new NextResponse('Unauthorized', { status: 401 });

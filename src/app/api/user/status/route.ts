@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import prisma from '@/lib/prisma';
 import { getUserSubscriptionPlan } from '@/utils/subscription';
+import { getUid } from '@/lib/auth';
 
 export async function GET() {
-  const cookieStore = await cookies();
-  const uid = cookieStore.get('uid')?.value;
+  const uid = await getUid();
 
   if (!uid) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -28,6 +27,7 @@ export async function GET() {
 
   return NextResponse.json({
     hasSelectedPlan,
+    email: user.email,
     plan: {
       name: plan.name,
       slug: plan.slug,

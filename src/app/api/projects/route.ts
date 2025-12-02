@@ -1,19 +1,17 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { cookies } from 'next/headers';
 import { getUserSubscriptionPlan } from '@/utils/subscription';
+import { getUid } from '@/lib/auth';
 
 export async function GET() {
-  const cookieStore = await cookies();
-  const uid = cookieStore.get('uid')?.value || '';
+  const uid = await getUid();
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const projects = await prisma.project.findMany({ where: { userId: uid }, orderBy: { updatedAt: 'desc' } });
   return NextResponse.json(projects);
 }
 
 export async function POST(req: Request) {
-  const cookieStore = await cookies();
-  const uid = cookieStore.get('uid')?.value || '';
+  const uid = await getUid();
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const user = await prisma.user.findUnique({ where: { id: uid } });
