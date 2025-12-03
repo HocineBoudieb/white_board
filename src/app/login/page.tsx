@@ -9,7 +9,9 @@ import { Eye, EyeOff, ArrowRight, Github, Mail, Lock, Sparkles } from 'lucide-re
 export default function LoginPage() {
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
+  const [confirmPassword, setConfirmPassword] = React.useState('');
   const [showPassword, setShowPassword] = React.useState(false);
+  const [isRegistering, setIsRegistering] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
   const router = useRouter();
@@ -57,19 +59,21 @@ export default function LoginPage() {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (e: any) {
       setError(e?.message || 'Erreur de connexion');
-    } finally {
       setLoading(false);
     }
   };
 
   const doRegister = async () => {
+    if (password !== confirmPassword) {
+      setError('Les mots de passe ne correspondent pas');
+      return;
+    }
     setError(null);
     setLoading(true);
     try {
       await createUserWithEmailAndPassword(auth, email, password);
     } catch (e: any) {
       setError(e?.message || 'Erreur d’inscription');
-    } finally {
       setLoading(false);
     }
   };
@@ -104,7 +108,11 @@ export default function LoginPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    doLogin();
+    if (isRegistering) {
+      doRegister();
+    } else {
+      doLogin();
+    }
   };
 
   return (
@@ -115,8 +123,8 @@ export default function LoginPage() {
         </div>
         <div className="max-w-md w-full mx-auto mt-12 mb-12">
           <div className="mb-10">
-            <h2 className="text-5xl font-black mb-4 text-black">Welcome back.</h2>
-            <p className="text-xl font-medium text-gray-600">Ready to organize the chaos inside your brain?</p>
+            <h2 className="text-5xl font-black mb-4 text-black">{isRegistering ? 'Join the club.' : 'Welcome back.'}</h2>
+            <p className="text-xl font-medium text-gray-600">{isRegistering ? 'Start organizing your chaos today.' : 'Ready to organize the chaos inside your brain?'}</p>
           </div>
           <div className="grid grid-cols-2 gap-4 mb-8">
             <button onClick={doGoogle} disabled={loading} className="flex items-center justify-center gap-2 py-3 px-4 bg-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] transition-all font-bold text-sm">
@@ -141,17 +149,51 @@ export default function LoginPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <div className="flex justify-between items-center ml-1"><label className="text-sm font-black uppercase tracking-wide">Password</label><a href="#" className="text-sm font-bold text-blue-600 hover:text-black hover:underline decoration-2 decoration-black underline-offset-2">Forgot?</a></div>
+              <div className="flex justify-between items-center ml-1"><label className="text-sm font-black uppercase tracking-wide">Password</label>{!isRegistering && <a href="#" className="text-sm font-bold text-blue-600 hover:text-black hover:underline decoration-2 decoration-black underline-offset-2">Forgot?</a>}</div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Lock className="h-5 w-5 text-black" /></div>
                 <input type={showPassword ? 'text' : 'password'} required className="block w-full pl-10 pr-10 py-4 border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:shadow-[2px_2px_0px_0px_rgba(236,72,153,1)] focus:border-pink-500 transition-all font-bold placeholder:text-gray-400 placeholder:font-normal bg-white" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 pr-3 flex items-center">{showPassword ? <EyeOff className="h-5 w-5 text-black" /> : <Eye className="h-5 w-5 text-black" />}</button>
               </div>
             </div>
+            {isRegistering && (
+              <div className="space-y-2">
+                <label className="text-sm font-black uppercase tracking-wide ml-1">Confirm Password</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Lock className="h-5 w-5 text-black" /></div>
+                  <input type={showPassword ? 'text' : 'password'} required className="block w-full pl-10 pr-10 py-4 border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:shadow-[2px_2px_0px_0px_rgba(236,72,153,1)] focus:border-pink-500 transition-all font-bold placeholder:text-gray-400 placeholder:font-normal bg-white" placeholder="••••••••" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+                </div>
+              </div>
+            )}
             {error && <div className="text-red-700 text-sm font-bold">{error}</div>}
-            <button type="submit" disabled={loading} className="w-full bg-black text-white text-xl font-black py-4 border-4 border-transparent hover:bg-yellow-300 hover:text-black hover:border-black shadow-[6px_6px_0px_0px_rgba(100,100,100,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all flex items-center justify-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed group">{loading ? (<div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" />) : (<>LOG IN <ArrowRight className="group-hover:translate-x-1 transition-transform" strokeWidth={3} /></>)}</button>
+            <button type="submit" disabled={loading} className="w-full bg-black text-white text-xl font-black py-4 border-4 border-transparent hover:bg-yellow-300 hover:text-black hover:border-black shadow-[6px_6px_0px_0px_rgba(100,100,100,1)] hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all flex items-center justify-center gap-3 disabled:opacity-70 disabled:cursor-not-allowed group">
+              {loading ? (
+                <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <>
+                  {isRegistering ? 'CREATE ACCOUNT' : 'LOG IN'} 
+                  <ArrowRight className="group-hover:translate-x-1 transition-transform" strokeWidth={3} />
+                </>
+              )}
+            </button>
           </form>
-          <div className="mt-8 text-center"><p className="font-bold text-gray-600">Don't have an account? <button onClick={doRegister} className="text-black underline decoration-4 decoration-yellow-300 hover:decoration-black underline-offset-4 transition-all">Create one now</button></p></div>
+          <div className="mt-8 text-center">
+            <p className="font-bold text-gray-600">
+              {isRegistering ? 'Already have an account? ' : "Don't have an account? "}
+              <button 
+                type="button"
+                onClick={() => {
+                  setIsRegistering(!isRegistering);
+                  setError(null);
+                  setPassword('');
+                  setConfirmPassword('');
+                }} 
+                className="text-black underline decoration-4 decoration-yellow-300 hover:decoration-black underline-offset-4 transition-all"
+              >
+                {isRegistering ? 'Log in' : 'Create one now'}
+              </button>
+            </p>
+          </div>
         </div>
         <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">© 2025 Fraym Inc. No boring stuff allowed.</div>
       </div>
