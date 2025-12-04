@@ -1,5 +1,5 @@
 import React, { memo, useState } from 'react';
-import { Handle, Position, NodeResizer } from 'reactflow';
+import { Handle, Position, NodeResizer, useReactFlow } from 'reactflow';
 
 export type GroupNodeProps = {
   data: {
@@ -11,7 +11,9 @@ export type GroupNodeProps = {
 };
 
 const GroupNode = ({ id, data }: GroupNodeProps) => {
+  const { getNodes, setNodes, setEdges } = useReactFlow();
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [name, setName] = useState<string>(data?.name || '');
 
   const handleDragOver = (event: React.DragEvent) => {
@@ -40,6 +42,104 @@ const GroupNode = ({ id, data }: GroupNodeProps) => {
     }
   };
 
+  const handleArrange = async () => {
+    // Debug logs
+    console.log('Arrange button clicked');
+    console.log('Group ID:', id);
+    
+    setIsLoading(true);
+    try {
+      const allNodes = getNodes();
+      console.log('All nodes count:', allNodes.length);
+      
+      // Filter nodes that are strictly inside this group
+      // A node is inside if its parentNode is this group's id
+      const childNodes = allNodes.filter((n: any) => n.parentNode === id);
+      console.log('Child nodes found:', childNodes.length, childNodes);
+      
+      if (childNodes.length === 0) {
+        alert('Ce groupe est vide (aucun nœud avec parentNode = ' + id + ')');
+        setIsLoading(false);
+        return;
+      }
+
+      // Ensure nodes have label/text for classification
+      const validNodes = childNodes.filter((n: any) => 
+        n.data?.label || n.data?.text || n.data?.content
+      ).map((n: any) => ({
+        ...n,
+        data: {
+          ...n.data,
+          // Normalize label for the API
+          label: n.data.label || n.data.text || n.data.content || ''
+        }
+      }));
+      
+      if (validNodes.length < 2) {
+        alert('Il faut au moins 2 nœuds avec du texte pour réorganiser.');
+        setIsLoading(false);
+        return;
+      }
+      
+      console.log('Sending to API:', validNodes.length, 'nodes');
+
+      const response = await fetch('/api/arrange', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nodes: validNodes })
+      });
+      
+      console.log('API Response status:', response.status);
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error('API Error:', errText);
+        throw new Error('Failed to arrange nodes: ' + errText);
+      }
+      
+      const result = await response.json();
+      console.log('API Result:', result);
+      const { positions, edges: newEdges } = result;
+      
+      if (!positions || positions.length === 0) {
+        console.warn('No positions returned from API');
+      }
+
+      // Update nodes with new positions relative to the group
+      if (setNodes) {
+        setNodes((nds: any[]) => {
+          // Create a map of new positions
+          const posMap = new Map(positions.map((p: any) => [p.id, p.position]));
+          
+          return nds.map(n => {
+            if (posMap.has(n.id)) {
+              console.log(`Updating node ${n.id} to`, posMap.get(n.id));
+              return { ...n, position: posMap.get(n.id) };
+            }
+            return n;
+          });
+        });
+      }
+      
+      // Add new edges
+      if (setEdges && newEdges && newEdges.length > 0) {
+        console.log('Adding edges:', newEdges.length);
+        setEdges((eds: any[]) => {
+          // Avoid duplicates?
+          const existingIds = new Set(eds.map(e => e.id));
+          const uniqueNewEdges = newEdges.filter((e: any) => !existingIds.has(e.id));
+          return [...eds, ...uniqueNewEdges];
+        });
+      }
+      
+    } catch (error) {
+      console.error('Arrangement failed:', error);
+      alert('Erreur lors du réarrangement (voir console)');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <>
       <NodeResizer minWidth={100} minHeight={50} />
@@ -61,6 +161,27 @@ const GroupNode = ({ id, data }: GroupNodeProps) => {
           overflow: 'visible',
         }}
       >
+        <button
+          onClick={handleArrange}
+          disabled={isLoading}
+          style={{
+            position: 'absolute',
+            top: -40,
+            right: 0,
+            padding: '4px 8px',
+            background: '#000',
+            color: '#fff',
+            border: 'none',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            cursor: isLoading ? 'wait' : 'pointer',
+            opacity: 0.8,
+            zIndex: 10
+          }}
+        >
+          {isLoading ? '...' : 'ARRANGE'}
+        </button>
+
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
