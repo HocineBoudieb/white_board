@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 import prisma from '@/lib/prisma';
 import { getUserSubscriptionPlan } from '@/utils/subscription';
 import { AutoTokenizer, AutoModelForSequenceClassification, env } from '@xenova/transformers';
+import { getUid } from '@/lib/auth';
 
 // Configure cache location to avoid re-downloading models in dev
 env.cacheDir = './.cache';
@@ -13,8 +13,10 @@ let modelInstance: any = null;
 
 async function getModelAndTokenizer() {
   if (!tokenizerInstance || !modelInstance) {
-    tokenizerInstance = await AutoTokenizer.from_pretrained("typeform/distilbert-base-uncased-mnli");
-    modelInstance = await AutoModelForSequenceClassification.from_pretrained("typeform/distilbert-base-uncased-mnli");
+    // Utilisation du modèle converti pour Transformers.js (Xenova)
+    const modelName = "Xenova/distilbert-base-uncased-mnli";
+    tokenizerInstance = await AutoTokenizer.from_pretrained(modelName);
+    modelInstance = await AutoModelForSequenceClassification.from_pretrained(modelName);
   }
   return { tokenizer: tokenizerInstance, model: modelInstance };
 }
@@ -52,8 +54,7 @@ async function classifyRelation(mainText: string, otherText: string) {
 }
 
 export async function POST(req: Request) {
-  const cookieStore = await cookies();
-  const uid = cookieStore.get('uid')?.value;
+  const uid = await getUid();
   if (!uid) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   
   const user = await prisma.user.findUnique({ where: { id: uid } });
