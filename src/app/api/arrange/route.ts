@@ -77,13 +77,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ positions: [], edges: [] });
   }
 
-  // Logic to identify the "main" node (e.g., the first one or the one with the most connections, 
-  // but here we'll simplify and take the first one as main)
+  // Helper to get node dimensions (defaulting if missing)
+  const getNodeSize = (n: any) => {
+    // ReactFlow nodes might have width/height in style, or measured property, or directly on node
+    // We need to be flexible.
+    const w = n.measured?.width || n.width || parseFloat(n.style?.width) || 250;
+    const h = n.measured?.height || n.height || parseFloat(n.style?.height) || 100;
+    return { width: w, height: h };
+  };
+
+  // Logic to identify the "main" node (first one)
   const mainNode = nodes[0];
   const mainId = mainNode.id;
-  const responses: string[] = [];
-  const oppositions: string[] = [];
-  const neutral: string[] = [];
+  const mainSize = getNodeSize(mainNode);
+  
+  const responses: any[] = [];
+  const oppositions: any[] = [];
+  const neutral: any[] = [];
 
   // Classify other nodes against the main node
   for (let i = 1; i < nodes.length; i++) {
@@ -91,73 +101,149 @@ export async function POST(req: Request) {
     const relation = await classifyRelation(mainNode.data.label, otherNode.data.label);
     
     if (relation === 'entailment') {
-      responses.push(otherNode.id);
+      responses.push(otherNode);
     } else if (relation === 'contradiction') {
-      oppositions.push(otherNode.id);
+      oppositions.push(otherNode);
     } else {
-      neutral.push(otherNode.id);
+      neutral.push(otherNode);
     }
   }
   
-  // Treat neutral as responses for layout simplicity in this version, or handle separately
-  // For now, let's just add neutrals to responses
+  // Treat neutral as responses for layout simplicity
   responses.push(...neutral);
 
-  // Dimensions approximatives
-  const mainWidth = 250; 
-  const nodeHeight = 100;
   const marginX = 50;
   const marginY = 50;
   
   let layout: any[] = [];
   let edges: any[] = [];
 
-  // Place main node
-  layout.push({ id: mainId, position: { x: 0, y: 0 } }); // Center at 0,0 initially
-
-  // Place response nodes in a vertical column below main
-  responses.forEach((nodeId, idx) => {
-    layout.push({
-      id: nodeId,
-      position: {
-        x: 0,
-        y: (idx + 1) * (nodeHeight + marginY)
-      }
-    });
-    edges.push({ 
-      id: `e-${mainId}-${nodeId}`,
-      source: mainId, 
-      target: nodeId,
-      type: 'default'
-    });
-  });
-
-  // Place opposition nodes to the sides of main
-  // We'll place them alternating left/right, starting from the top level
-  // But to avoid overlapping with the main column, we push them out by mainWidth + marginX
-  oppositions.forEach((nodeId, idx) => {
-    const side = (idx % 2 === 0) ? 'right' : 'left';
-    const offsetX = side === 'right' ? (mainWidth + marginX) : -(mainWidth + marginX);
-    // Align vertically with responses if possible, or just stack them
-    const offsetY = (Math.floor(idx / 2) + 1) * (nodeHeight + marginY);
+  // Layout strategy:
+  // 1. Main node at top center (relative to group 0,0, we'll shift later)
+  // 2. Responses in a column below Main.
+  // 3. Oppositions on sides (alternating Left/Right), aligned vertically.
+  
+  // We need to track the bounding box of the central column to place oppositions correctly.
+  // But oppositions also have width.
+  
+  // Let's build the central column first.
+  // Start Main at (0, 0) - we will shift everything by padding later.
+  let currentY = 0;
+  
+  // Place Main
+  layout.push({ id: mainId, position: { x: 0, y: currentY } }); // Center X later? No, let's say Main center is X=0.
+  // Actually, it's easier if we use top-left coordinates.
+  // Let's assume X=0 is the left edge of the central column? No, center is better.
+  // Let's stick to: X=0 is the center line.
+  // So Main X = -mainWidth/2
+  
+  layout[0].position.x = -mainSize.width / 2;
+  currentY += mainSize.height + marginY;
+  
+  // Place Responses
+  // We need to know the max width of the central column to place side nodes safely.
+  let maxCentralWidth = mainSize.width;
+  
+  responses.forEach((node) => {
+    const size = getNodeSize(node);
+    // Center this node at X=0
+    const x = -size.width / 2;
+    const y = currentY;
     
     layout.push({
-      id: nodeId,
-      position: {
-        x: offsetX,
-        y: offsetY
-      }
+      id: node.id,
+      position: { x, y }
     });
+    
     edges.push({ 
-      id: `e-${mainId}-${nodeId}`,
+      id: `e-${mainId}-${node.id}`,
       source: mainId, 
-      target: nodeId, 
-      type: 'smoothstep', // distinct edge type for opposition could be useful
+      target: node.id,
+      type: 'default'
+    });
+    
+    if (size.width > maxCentralWidth) maxCentralWidth = size.width;
+    currentY += size.height + marginY;
+  });
+  
+  // Central column done. Bounding box of central column:
+  // X range: [-maxCentralWidth/2, maxCentralWidth/2]
+  // Y range: [0, currentY - marginY]
+  
+  // Place Oppositions
+  // We'll place them starting from the top (below main? or aligned with main?).
+  // Let's align them starting from the first response level (or main level).
+  // Let's start from main level.
+  
+  let leftY = 0;
+  let rightY = 0;
+  const sideMargin = 100; // Extra margin between columns
+  
+  oppositions.forEach((node, idx) => {
+    const size = getNodeSize(node);
+    const side = (idx % 2 === 0) ? 'right' : 'left';
+    
+    let x, y;
+    if (side === 'right') {
+      x = (maxCentralWidth / 2) + sideMargin;
+      y = rightY;
+      rightY += size.height + marginY;
+    } else {
+      x = -(maxCentralWidth / 2) - sideMargin - size.width;
+      y = leftY;
+      leftY += size.height + marginY;
+    }
+    
+    layout.push({
+      id: node.id,
+      position: { x, y }
+    });
+    
+    edges.push({ 
+      id: `e-${mainId}-${node.id}`,
+      source: mainId, 
+      target: node.id, 
+      type: 'smoothstep',
       animated: true,
-      style: { stroke: '#ff0000' }, // Red for opposition
+      style: { stroke: '#ff0000' },
       label: 'contradicts'
     });
   });
   
-  return NextResponse.json({ positions: layout, edges });
+  // Calculate final Bounding Box
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  
+  layout.forEach(item => {
+    // We need dimensions again to find bottom-right
+    const node = nodes.find((n: any) => n.id === item.id);
+    const size = getNodeSize(node);
+    
+    if (item.position.x < minX) minX = item.position.x;
+    if (item.position.y < minY) minY = item.position.y;
+    if (item.position.x + size.width > maxX) maxX = item.position.x + size.width;
+    if (item.position.y + size.height > maxY) maxY = item.position.y + size.height;
+  });
+  
+  // Add padding for the group container
+  const padding = 40;
+  
+  // Shift all nodes so that (minX, minY) becomes (padding, padding)
+  // The new Top-Left of the content will be at (padding, padding) inside the group
+  
+  const finalLayout = layout.map(item => ({
+    id: item.id,
+    position: {
+      x: item.position.x - minX + padding,
+      y: item.position.y - minY + padding
+    }
+  }));
+  
+  const groupWidth = (maxX - minX) + (padding * 2);
+  const groupHeight = (maxY - minY) + (padding * 2);
+  
+  return NextResponse.json({ 
+    positions: finalLayout, 
+    edges,
+    groupSize: { width: groupWidth, height: groupHeight }
+  });
 }

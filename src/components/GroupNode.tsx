@@ -99,7 +99,7 @@ const GroupNode = ({ id, data }: GroupNodeProps) => {
       
       const result = await response.json();
       console.log('API Result:', result);
-      const { positions, edges: newEdges } = result;
+      const { positions, edges: newEdges, groupSize } = result;
       
       if (!positions || positions.length === 0) {
         console.warn('No positions returned from API');
@@ -112,6 +112,18 @@ const GroupNode = ({ id, data }: GroupNodeProps) => {
           const posMap = new Map(positions.map((p: any) => [p.id, p.position]));
           
           return nds.map(n => {
+            if (n.id === id && groupSize) {
+              // Update group size if provided
+              console.log(`Updating group ${n.id} size to`, groupSize);
+              return { 
+                ...n, 
+                style: { 
+                  ...n.style, 
+                  width: groupSize.width, 
+                  height: groupSize.height 
+                } 
+              };
+            }
             if (posMap.has(n.id)) {
               console.log(`Updating node ${n.id} to`, posMap.get(n.id));
               return { ...n, position: posMap.get(n.id) };
