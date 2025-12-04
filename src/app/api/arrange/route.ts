@@ -24,8 +24,14 @@ async function getModelAndTokenizer() {
 async function classifyRelation(mainText: string, otherText: string) {
   const { tokenizer, model } = await getModelAndTokenizer();
   
-  // Using text_pair for NLI task
-  const inputs = await tokenizer(mainText, { text_pair: otherText });
+  // Using text_pair for NLI task with truncation to avoid "BroadcastIterator" errors
+  // if input length > model max length (typically 512 for BERT)
+  const inputs = await tokenizer(mainText, { 
+    text_pair: otherText,
+    padding: true,
+    truncation: true,
+    max_length: 512
+  });
   const { logits } = await model(inputs);
   
   // Logits to probabilities (Softmax)
