@@ -34,6 +34,8 @@ import ProgressTrackerNode from './ProgressTrackerNode';
 import { PostItNode } from './PostItNode';
 import { LimitModal } from './LimitModal';
 import { AiEditDialog } from './AiEditDialog';
+import { LayoutConfigModal } from './LayoutConfigModal';
+import { SemanticLayoutEngine, LayoutType, LayoutOptions } from '../utils/semanticLayout';
 import { searchSimilarChunks, batchGenerateEmbeddings } from '../utils/vectorStore';
 import { Wand2 } from 'lucide-react';
 import { WHITEBOARD_SYSTEM_PROMPT } from '../constants';
@@ -113,9 +115,118 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
   const [menu, setMenu] = useState<{ id: string; top: number; left: number } | null>(null);
   const [aiEditNodeId, setAiEditNodeId] = useState<string | null>(null);
   const [isAiEditing, setIsAiEditing] = useState(false);
+  const [layoutConfig, setLayoutConfig] = useState<{ isOpen: boolean; groupId: string | null }>({
+    isOpen: false,
+    groupId: null,
+  });
+
   const reactFlow = useReactFlow();
   const { screenToFlowPosition, getNodes, getNode } = reactFlow;
   const lastClickTime = React.useRef(0);
+
+  const openLayoutConfig = useCallback((groupId: string) => {
+    setLayoutConfig({ isOpen: true, groupId });
+  }, []);
+
+  const handleApplyLayout = (type: LayoutType, options: LayoutOptions) => {
+    if (!layoutConfig.groupId) return;
+    
+    const groupId = layoutConfig.groupId;
+    const allNodes = getNodes();
+    const allEdges = reactFlow.getEdges();
+
+    // Find children of the group
+    const children = allNodes.filter(n => n.parentNode === groupId);
+    
+    // Calculate new positions (logic handles relative positions if passed as such)
+    const updatedChildren = SemanticLayoutEngine.calculateLayout(children, allEdges, type, options);
+    
+    if (updatedChildren.length === 0) return;
+
+    // Calculate bounding box to resize group
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    updatedChildren.forEach((node) => {
+      const w = (node.style?.width as number) || node.width || 220;
+      const h = (node.style?.height as number) || node.height || 200;
+      if (node.position.x < minX) minX = node.position.x;
+      if (node.position.y < minY) minY = node.position.y;
+      if (node.position.x + w > maxX) maxX = node.position.x + w;
+      if (node.position.y + h > maxY) maxY = node.position.y + h;
+    });
+
+    const PADDING = 40;
+    const TITLE_OFFSET = 60;
+
+    // Normalize positions to start at (PADDING, TITLE_OFFSET)
+    const finalChildren = updatedChildren.map((node) => ({
+      ...node,
+      position: {
+        x: node.position.x - minX + PADDING,
+        y: node.position.y - minY + TITLE_OFFSET + PADDING,
+      },
+    }));
+
+    const newGroupWidth = (maxX - minX) + PADDING * 2;
+    const newGroupHeight = (maxY - minY) + TITLE_OFFSET + PADDING * 2;
+
+    setNodes((nds) => nds.map((n) => {
+      // Update group size
+      if (n.id === groupId) {
+        return {
+          ...n,
+          style: { ...n.style, width: newGroupWidth, height: newGroupHeight },
+        };
+      }
+
+      // Update children positions
+      const updated = finalChildren.find(un => un.id === n.id);
+      if (updated) {
+        return { 
+          ...n, 
+          position: { ...updated.position },
+          style: { ...n.style, transition: 'all 0.5s ease' } // Add animation
+        };
+      }
+      return n;
+    }));
+
+    // Remove transition after animation
+    setTimeout(() => {
+      setNodes((nds) => nds.map((n) => {
+        if (n.parentNode === groupId) {
+           const { transition, ...restStyle } = n.style || {};
+           return { ...n, style: restStyle };
+        }
+        return n;
+      }));
+    }, 600);
+  };
+
+  // Patch group nodes with the layout callback
+  React.useEffect(() => {
+    setNodes((nds) => {
+      let hasChanges = false;
+      const newNodes = nds.map((node) => {
+        if (node.type === 'group' && node.data.onLayoutClick !== openLayoutConfig) {
+          hasChanges = true;
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              onLayoutClick: openLayoutConfig,
+            },
+          };
+        }
+        return node;
+      });
+      return hasChanges ? newNodes : nds;
+    });
+  }, [openLayoutConfig, setNodes]);
+
   const isDrawing = React.useRef(false);
   const currentDrawing = React.useRef<any>(null);
   const drawingStartPos = React.useRef({ x: 0, y: 0 });
@@ -1570,6 +1681,12 @@ If you want to include a YouTube video, you MUST use the 'youtube' node type wit
         isOpen={showLimitModal} 
         onClose={() => setShowLimitModal(false)} 
         description="Vous avez atteint la limite de votre plan. Passez à la vitesse supérieure pour utiliser l'IA et créer plus de contenu."
+      />
+
+      <LayoutConfigModal
+        isOpen={layoutConfig.isOpen}
+        onClose={() => setLayoutConfig({ ...layoutConfig, isOpen: false })}
+        onApply={handleApplyLayout}
       />
     </div>
   );
