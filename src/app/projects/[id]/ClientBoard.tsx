@@ -119,9 +119,9 @@ export default function ClientBoard({ id, initialTitle, initialNodes, initialEdg
           height: 24,
           padding: 4,
         }),
-        dot: (base, { current }) => ({
+        dot: (base, state: any) => ({
           ...base,
-          background: current ? '#000' : '#ccc',
+          background: state?.current ? '#000' : '#ccc',
           border: '1px solid #000',
         }),
       }}
