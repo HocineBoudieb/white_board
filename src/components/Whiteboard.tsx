@@ -78,9 +78,10 @@ const calculateNodeSize = (type: string, data: any) => {
     const lines = data.text.split('\n');
     const maxLineLength = Math.max(...lines.map((l: string) => l.length), 0);
     const contentWidth = maxLineLength * 8 + 40;
-    w = Math.min(600, Math.max(300, contentWidth));
+    w = Math.min(800, Math.max(300, contentWidth));
     const contentHeight = lines.length * 24 + 60;
-    h = Math.min(800, Math.max(200, contentHeight));
+    // Remove the height cap to ensure all text is visible without overflow
+    h = Math.max(200, contentHeight);
   } else if (type === 'todo' && Array.isArray(data?.items)) {
     const items = data.items;
     const maxItemLength = Math.max(...items.map((i: any) => (i.text || '').length), 0);
@@ -107,7 +108,7 @@ const calculateNodeSize = (type: string, data: any) => {
   return { w, h };
 };
 
-export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: string; name: string }[]) => void; initialNodes?: Node[]; initialEdges?: Edge[]; projectId?: string; title?: string; userStatus?: any; tool?: 'cursor' | 'markdown' | 'image' | 'youtube' | 'postit' | 'highlighter' | 'eraser' | 'pen' }>(function Whiteboard({ onGroupsChange, initialNodes = defaultInitialNodes, initialEdges = defaultInitialEdges, projectId, title, userStatus, tool = 'cursor' }, ref) {
+export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: string; name: string }[]) => void; initialNodes?: Node[]; initialEdges?: Edge[]; projectId?: string; title?: string; userStatus?: any; tool?: 'cursor' | 'markdown' | 'image' | 'postit' | 'highlighter' | 'eraser' | 'pen' }>(function Whiteboard({ onGroupsChange, initialNodes = defaultInitialNodes, initialEdges = defaultInitialEdges, projectId, title, userStatus, tool = 'cursor' }, ref) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [showLimitModal, setShowLimitModal] = useState(false);
@@ -967,6 +968,24 @@ export default forwardRef<WhiteboardHandle, { onGroupsChange?: (groups: { id: st
       });
     }, [getNode, setNodes]);
 
+  // Restore onSubmit handler for AI nodes loaded from storage
+  React.useEffect(() => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.type === 'text' && !node.data.onSubmit) {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              onSubmit: (text: string, context?: string) => handleAiNodeSubmit(node.id, text, context),
+            },
+          };
+        }
+        return node;
+      })
+    );
+  }, [handleAiNodeSubmit, setNodes]);
+
   const handleAiEdit = async (instructions: string) => {
     if (!aiEditNodeId) return;
     const node = getNode(aiEditNodeId);
@@ -1195,14 +1214,6 @@ If you want to include a YouTube video, you MUST use the 'youtube' node type wit
             position,
             data: { url: '', setNodes },
             style: { width: 220, height: 260 },
-          };
-        } else if (tool === 'youtube') {
-          newNode = {
-            id: `node-${newId}`,
-            type: 'youtube',
-            position,
-            data: { videoId: '', setNodes },
-            style: { width: 320, height: 240 },
           };
         } else if (tool === 'markdown') {
           newNode = {

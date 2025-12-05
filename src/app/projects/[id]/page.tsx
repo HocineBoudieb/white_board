@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import ClientBoard from './ClientBoard';
 import { cookies } from 'next/headers';
 import { getUserSubscriptionPlan } from '@/utils/subscription';
+import { getUid } from '@/lib/auth';
 
 export default async function ProjectBoardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -14,8 +15,7 @@ export default async function ProjectBoardPage({ params }: { params: Promise<{ i
     notFound();
   }
 
-  const cookieStore = await cookies();
-  const uid = cookieStore.get('uid')?.value;
+  const uid = await getUid();
   let userStatus = null;
 
   if (uid) {

@@ -47,7 +47,14 @@ export function getUserSubscriptionPlan(user: User | null) {
     return PLANS[0];
   }
 
-  const plan = PLANS.find((plan) => plan.price.priceIds.test === user.stripePriceId) || PLANS[0];
+  const plan = PLANS.find((plan) => 
+    plan.price.priceIds.test === user.stripePriceId || 
+    (plan.price.priceIds.production && plan.price.priceIds.production === user.stripePriceId)
+  ) || PLANS[0];
+
+  if (plan.slug === 'free' && user.stripePriceId) {
+    console.warn(`User ${user.id} has stripePriceId ${user.stripePriceId} but it did not match any plan. Defaulting to Free.`);
+  }
 
   return {
     ...plan,

@@ -4,7 +4,7 @@ import React from 'react';
 import Whiteboard from '@/components/Whiteboard';
 import { ReactFlowProvider, Node, Edge } from 'reactflow';
 import { useRouter } from 'next/navigation';
-import { MousePointer2, Type, Image as ImageIcon, StickyNote, Highlighter, ArrowLeft, Save, Eraser, Pen, Youtube } from 'lucide-react';
+import { MousePointer2, Type, Image as ImageIcon, StickyNote, Highlighter, ArrowLeft, Save, Eraser, Pen } from 'lucide-react';
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { TourProvider } from '@reactour/tour';
 import ProjectTour from '@/components/ProjectTour';
@@ -52,9 +52,26 @@ export default function ClientBoard({ id, initialTitle, initialNodes, initialEdg
   const [collapsed, setCollapsed] = React.useState<boolean>(false);
   const [groups, setGroups] = React.useState<{ id: string; name: string }[]>([]);
   const whiteboardRef = React.useRef<any>(null);
-  const [tool, setTool] = React.useState<'cursor' | 'markdown' | 'image' | 'youtube' | 'postit' | 'highlighter' | 'eraser' | 'pen'>('cursor');
+  const [tool, setTool] = React.useState<'cursor' | 'markdown' | 'image' | 'postit' | 'highlighter' | 'eraser' | 'pen'>('cursor');
   const router = useRouter();
   const { track } = useAnalytics();
+  const [status, setStatus] = React.useState(userStatus);
+
+  React.useEffect(() => {
+    if (!status) {
+      fetch('/api/user/status')
+        .then((res) => {
+          if (res.ok) return res.json();
+          return null;
+        })
+        .then((data) => {
+          if (data && !data.error) {
+            setStatus(data);
+          }
+        })
+        .catch((err) => console.error('Failed to fetch user status:', err));
+    }
+  }, [status]);
 
   const nodesFixed = React.useMemo(() => fixEmbeddings(initialNodes as any[]), [initialNodes]);
 
@@ -240,7 +257,7 @@ export default function ClientBoard({ id, initialTitle, initialNodes, initialEdg
               initialEdges={(Array.isArray(initialEdges) ? initialEdges : []) as any}
               projectId={id}
               title={title}
-              userStatus={userStatus}
+              userStatus={status}
               tool={tool}
             />
           </div>
@@ -323,25 +340,6 @@ export default function ClientBoard({ id, initialTitle, initialNodes, initialEdg
             }}
           >
             <ImageIcon size={20} />
-          </button>
-          <button
-            onClick={() => handleToolChange('youtube')}
-            title="YouTube"
-            style={{
-              padding: '10px',
-              background: tool === 'youtube' ? '#000' : '#fff',
-              color: tool === 'youtube' ? '#fff' : '#000',
-              border: '2px solid #000',
-              cursor: 'pointer',
-              transition: 'all 0.1s',
-              transform: tool === 'youtube' ? 'translate(2px, 2px)' : 'none',
-              boxShadow: tool === 'youtube' ? 'none' : '2px 2px 0px 0px #000',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <Youtube size={20} />
           </button>
           <button
             onClick={() => handleToolChange('postit')}

@@ -7,12 +7,44 @@ import styles from './MarkdownNode.module.css';
 export function MarkdownNode({ id, data, selected }: NodeProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState(data.text);
-  const { setNodes } = useReactFlow();
+  const { setNodes, getNode } = useReactFlow();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setText(data.text);
   }, [data.text]);
+
+  useEffect(() => {
+    if (!isEditing && contentRef.current) {
+      // Give it a moment to render the markdown
+      requestAnimationFrame(() => {
+        if (!contentRef.current) return;
+        
+        const contentHeight = contentRef.current.scrollHeight;
+        const node = getNode(id);
+        
+        if (node && node.style) {
+          const currentHeight = typeof node.style.height === 'number' 
+            ? node.style.height 
+            : parseInt(node.style.height as string || '0', 10);
+
+          // If content is taller than current height, expand it
+          // We add a small buffer (e.g. 30px) to ensure no scrollbar appears
+          if (contentHeight > currentHeight) {
+            setNodes((nodes) =>
+              nodes.map((n) => {
+                if (n.id === id) {
+                  return { ...n, style: { ...n.style, height: contentHeight + 30 } };
+                }
+                return n;
+              })
+            );
+          }
+        }
+      });
+    }
+  }, [text, isEditing, id, setNodes, getNode]);
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
@@ -61,7 +93,7 @@ export function MarkdownNode({ id, data, selected }: NodeProps) {
             placeholder="Write markdown here..."
           />
         ) : (
-          <div className={styles.markdownContent}>
+          <div className={styles.markdownContent} ref={contentRef}>
             <ReactMarkdown>{text || '*Double-click to edit*'}</ReactMarkdown>
           </div>
         )}

@@ -3,6 +3,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { cookies } from 'next/headers';
 import prisma from '@/lib/prisma';
 import { getUserSubscriptionPlan } from '@/utils/subscription';
+import { getUid } from '@/lib/auth';
 
 const groq = createOpenAI({
   baseURL: 'https://api.groq.com/openai/v1',
@@ -10,8 +11,7 @@ const groq = createOpenAI({
 });
 
 export async function POST(req: Request) {
-  const cookieStore = await cookies();
-  const uid = cookieStore.get('uid')?.value;
+  const uid = await getUid();
 
   if (!uid) {
     return new Response('Unauthorized', { status: 401 });
